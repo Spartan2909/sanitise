@@ -1,0 +1,16 @@
+[package]
+name = "asylum"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[[bin]]
+name = "sanity"
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = "2.0"
+yaml-rust = "0.4"

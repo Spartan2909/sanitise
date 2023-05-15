@@ -1,0 +1,28 @@
+processes:
+  - name: validate
+    columns:
+      - title: time
+        type: integer
+        null-surrogate: -1
+      - title: pulse
+        type: integer
+        null-surrogate: -1
+        max: 100
+        min: 40
+        on-invalid: average
+      - title: movement
+        type: integer
+        null-surrogate: -1
+        valid-values: [0, 1]
+        output: "value == 1"
+  - name: process
+    columns:
+      - title: time
+        type: integer
+        output: "value / 1000"
+      - title: pulse
+        type: integer
+        ignore: true
+      - title: movement
+        type: integer
+        ignore: true
