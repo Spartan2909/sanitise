@@ -71,26 +71,41 @@ impl From<Yaml> for Value {
 enum OnInvalid {
     Abort,
     Average,
+    Delete,
+    Previous(Value),
     Sentinel(Value),
 }
 
-impl From<&Yaml> for OnInvalid {
-    fn from(value: &Yaml) -> Self {
-        if let Yaml::String(s) = value {
-            if s == "abort" {
-                return OnInvalid::Abort;
-            } else if s == "average" {
-                return OnInvalid::Average;
-            }
+fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
+    let on_invalid = yaml
+        .as_str()
+        .unwrap_or_else(|| panic!("value of on-{kind} must be a string"));
+
+    match on_invalid {
+        "abort" => OnInvalid::Abort,
+        "average" => OnInvalid::Average,
+        "delete" => OnInvalid::Delete,
+        "previous" => {
+            let key = format!("{kind}-sentinel");
+            let sentinel = hash
+                .remove(&Yaml::from_str(&key))
+                .unwrap_or_else(|| {
+                    panic!("'previous' option for on-{kind} requires key '{kind}-sentinel")
+                })
+                .into();
+            OnInvalid::Previous(sentinel)
         }
-
-        OnInvalid::Sentinel(value.into())
-    }
-}
-
-impl From<Yaml> for OnInvalid {
-    fn from(value: Yaml) -> Self {
-        OnInvalid::from(&value)
+        "sentinel" => {
+            let key = format!("{kind}-sentinel");
+            let sentinel = hash
+                .remove(&Yaml::from_str(&key))
+                .unwrap_or_else(|| {
+                    panic!("'sentinel' option for on-{kind} requires key '{kind}-sentinel")
+                })
+                .into();
+            OnInvalid::Sentinel(sentinel)
+        }
+        _ => panic!("invalid value for on-{kind}: '{on_invalid}'"),
     }
 }
 
@@ -206,12 +221,12 @@ fn parse_column(input: Yaml) -> Column {
 
     let on_invalid = input
         .remove(&Yaml::from_str("on-invalid"))
-        .map(|yaml| yaml.into())
+        .map(|yaml| get_on_invalid(&yaml, &mut input, "invalid"))
         .unwrap_or(OnInvalid::Abort);
 
     let on_null = input
         .remove(&Yaml::from_str("on-null"))
-        .map(|yaml| yaml.into())
+        .map(|yaml| get_on_invalid(&yaml, &mut input, "null"))
         .unwrap_or(OnInvalid::Abort);
 
     let max = input.remove(&Yaml::from_str("max")).map(|yaml| yaml.into());
