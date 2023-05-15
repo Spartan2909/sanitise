@@ -7,7 +7,12 @@ use std::collections::VecDeque;
 
 extern crate proc_macro;
 
-use syn::{parse_macro_input, LitStr};
+use quote::{quote, ToTokens};
+use syn::{
+    parse,
+    parse::{Parse, ParseStream},
+    parse_macro_input, Expr, LitStr, Result, Token,
+};
 use yaml_rust::{yaml::Hash, Yaml, YamlLoader};
 
 #[derive(Debug, Clone, Copy)]
@@ -280,10 +285,35 @@ fn parse_program(input: Yaml) -> Program {
     Program(processes)
 }
 
+struct MacroInput {
+    config: LitStr,
+    _comma: Token![,],
+    csv: Expr,
+}
+
+impl Parse for MacroInput {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let config: Expr = input.parse()?;
+        let _comma = input.parse()?;
+        let csv = input.parse()?;
+
+        let tokens: proc_macro::TokenStream = config.to_token_stream().into();
+        let tokens = tokens.expand_expr().unwrap_or_else(|err| panic!("{err}"));
+
+        let config = parse(tokens)?;
+
+        Ok(MacroInput {
+            config,
+            _comma,
+            csv,
+        })
+    }
+}
+
 #[proc_macro]
 pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = input.expand_expr().unwrap_or_else(|err| panic!("{err}"));
-    let source = parse_macro_input!(input as LitStr).value();
+    let input = parse_macro_input!(input as MacroInput);
+    let source = input.config.value();
     let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
         .pop_front()
         .unwrap();
@@ -292,5 +322,5 @@ pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let output = format!("{:#?}", program);
 
-    quote::quote!(#output).into()
+    quote!(#output).into()
 }
