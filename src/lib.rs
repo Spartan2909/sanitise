@@ -169,8 +169,32 @@ struct Process {
     columns: Vec<Column>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum OnTitle {
+    Once,
+    Split,
+}
+
+impl From<Yaml> for OnTitle {
+    fn from(value: Yaml) -> Self {
+        let value = value
+            .into_string()
+            .expect("value of 'on_title' must be a string");
+        let on_title: &str = &value;
+
+        match on_title {
+            "once" => OnTitle::Once,
+            "split" => OnTitle::Split,
+            _ => panic!("invalid value for title: '{on_title}'"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-struct Program(Vec<Process>);
+struct Program {
+    processes: Vec<Process>,
+    on_title: OnTitle,
+}
 
 fn ensure_empty(hash: &Hash, map_name: &str) {
     if !hash.is_empty() {
@@ -295,9 +319,17 @@ fn parse_program(input: Yaml) -> Program {
         .map(|yaml| parse_process(yaml))
         .collect();
 
+    let on_title = program
+        .remove(&Yaml::from_str("on-title"))
+        .map(|yaml| yaml.into())
+        .unwrap_or(OnTitle::Once);
+
     ensure_empty(&program, "program");
 
-    Program(processes)
+    Program {
+        processes,
+        on_title,
+    }
 }
 
 struct MacroInput {

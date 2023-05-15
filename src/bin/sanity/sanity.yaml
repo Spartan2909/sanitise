@@ -26,3 +26,4 @@ processes:
       - title: movement
         type: integer
         ignore: true
+on-title: split
