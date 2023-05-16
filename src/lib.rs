@@ -2,11 +2,13 @@
 
 mod output;
 use output::parse_output;
+mod to_tokens;
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, fmt};
 
 extern crate proc_macro;
 
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     parse,
@@ -15,8 +17,9 @@ use syn::{
 };
 use yaml_rust::{yaml::Hash, Yaml, YamlLoader};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ColumnType {
+    Bool,
     Float,
     Integer,
     String,
@@ -25,6 +28,7 @@ enum ColumnType {
 impl From<&str> for ColumnType {
     fn from(value: &str) -> Self {
         match value {
+            "boolean" => ColumnType::Bool,
             "float" => ColumnType::Float,
             "integer" => ColumnType::Integer,
             "string" => ColumnType::String,
@@ -39,7 +43,26 @@ impl From<String> for ColumnType {
     }
 }
 
-#[derive(Debug, Clone)]
+impl From<&ColumnType> for Ident {
+    fn from(value: &ColumnType) -> Self {
+        let string = match value {
+            ColumnType::Bool => "bool",
+            ColumnType::Float => "f64",
+            ColumnType::Integer => "i64",
+            ColumnType::String => "String",
+        };
+
+        Ident::new(string, Span::mixed_site())
+    }
+}
+
+impl From<ColumnType> for Ident {
+    fn from(value: ColumnType) -> Self {
+        (&value).into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum Value {
     Boolean(bool),
     Integer(i64),
@@ -67,10 +90,10 @@ impl From<Yaml> for Value {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum OnInvalid {
     Abort,
-    Average,
+    Average(usize),
     Delete,
     Previous(Value),
     Sentinel(Value),
@@ -83,14 +106,25 @@ fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
 
     match on_invalid {
         "abort" => OnInvalid::Abort,
-        "average" => OnInvalid::Average,
+        "average" => {
+            let valid_streak = hash
+                .remove(&Yaml::from_str("valid-streak"))
+                .unwrap_or_else(|| {
+                    panic!("'average' option for on-{kind} requires key 'valid-streak'")
+                })
+                .into_i64()
+                .map(|n| n.try_into().ok())
+                .flatten()
+                .expect("'valid-streak' must be a positive integer");
+            OnInvalid::Average(valid_streak)
+        }
         "delete" => OnInvalid::Delete,
         "previous" => {
             let key = format!("{kind}-sentinel");
             let sentinel = hash
                 .remove(&Yaml::from_str(&key))
                 .unwrap_or_else(|| {
-                    panic!("'previous' option for on-{kind} requires key '{kind}-sentinel")
+                    panic!("'previous' option for on-{kind} requires key '{kind}-sentinel'")
                 })
                 .into();
             OnInvalid::Previous(sentinel)
@@ -100,7 +134,7 @@ fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
             let sentinel = hash
                 .remove(&Yaml::from_str(&key))
                 .unwrap_or_else(|| {
-                    panic!("'sentinel' option for on-{kind} requires key '{kind}-sentinel")
+                    panic!("'sentinel' option for on-{kind} requires key '{kind}-sentinel'")
                 })
                 .into();
             OnInvalid::Sentinel(sentinel)
@@ -163,13 +197,67 @@ struct Column {
     ignore: bool,
 }
 
+impl Column {
+    fn needs_state(&self) -> bool {
+        matches!(self.on_invalid, OnInvalid::Average(_))
+            || matches!(self.on_null, OnInvalid::Average(_))
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Process {
     name: String,
     columns: Vec<Column>,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Process {
+    fn signiature(&self) -> TokenStream {
+        let mut tokens = TokenStream::new();
+        for column in &self.columns {
+            if column.ignore {
+                continue;
+            }
+
+            let kind: Ident = column.output_kind.into();
+
+            tokens.extend(quote!(Vec<#kind>,));
+        }
+
+        quote!((#tokens))
+    }
+
+    fn column_names(&self) -> Vec<Ident> {
+        let mut column_names = vec![];
+
+        for column in &self.columns {
+            column_names.push(Ident::new(&column.title, Span::call_site()));
+        }
+
+        column_names
+    }
+
+    fn header(&self, trailing_comma: bool) -> String {
+        let mut header = String::new();
+        for (i, column) in self.columns.iter().enumerate() {
+            header += &column.title;
+            if i + 1 < self.columns.len() {
+                header += ",";
+            }
+        }
+
+        if trailing_comma {
+            header += ",";
+        }
+
+        header
+    }
+
+    fn ignores(&self) -> Vec<bool> {
+        self.columns.iter().map(|column| column.ignore).collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum OnTitle {
     Once,
     Split,
@@ -190,10 +278,28 @@ impl From<Yaml> for OnTitle {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+#[allow(dead_code)]
+struct ProgramDebug<'a> {
+    processes: &'a Vec<Process>,
+    on_title: &'a OnTitle,
+}
+
+#[derive(Clone)]
 struct Program {
     processes: Vec<Process>,
     on_title: OnTitle,
+    csv: Expr,
+}
+
+impl fmt::Debug for Program {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        ProgramDebug {
+            processes: &self.processes,
+            on_title: &self.on_title,
+        }
+        .fmt(f)
+    }
 }
 
 fn ensure_empty(hash: &Hash, map_name: &str) {
@@ -253,6 +359,10 @@ fn parse_column(input: Yaml) -> Column {
         .map(|yaml| get_on_invalid(&yaml, &mut input, "null"))
         .unwrap_or(OnInvalid::Abort);
 
+    if matches!(on_null, OnInvalid::Average(_)) && !matches!(on_invalid, OnInvalid::Average(_)) {
+        panic!("'on-null' can only be 'average' if 'on-invalid' is also 'average'")
+    }
+
     let max = input.remove(&Yaml::from_str("max")).map(|yaml| yaml.into());
 
     let min = input.remove(&Yaml::from_str("min")).map(|yaml| yaml.into());
@@ -307,7 +417,7 @@ fn parse_process(input: Yaml) -> Process {
     Process { name, columns }
 }
 
-fn parse_program(input: Yaml) -> Program {
+fn parse_program(input: Yaml, csv: Expr) -> Program {
     let mut program = input.into_hash().expect("config must be a map");
 
     let processes = program
@@ -329,6 +439,7 @@ fn parse_program(input: Yaml) -> Program {
     Program {
         processes,
         on_title,
+        csv,
     }
 }
 
@@ -365,9 +476,7 @@ pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .pop_front()
         .unwrap();
 
-    let program = parse_program(yaml);
+    let program = parse_program(yaml, input.csv);
 
-    let output = format!("{:#?}", program);
-
-    quote!(#output).into()
+    program.to_token_stream().into()
 }

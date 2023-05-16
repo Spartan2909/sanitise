@@ -1,20 +1,28 @@
+on-title: split
 processes:
   - name: validate
     columns:
       - title: time
         type: integer
         null-surrogate: -1
+        on-null: previous
+        null-sentinel: 0
       - title: pulse
         type: integer
         null-surrogate: -1
         max: 100
         min: 40
         on-invalid: average
+        valid-streak: 3
+        on-null: previous
+        null-sentinel: 0
       - title: movement
         type: integer
         null-surrogate: -1
         valid-values: [0, 1]
+        output-type: boolean
         output: "value == 1"
+        on-null: delete
   - name: process
     columns:
       - title: time
@@ -26,4 +34,3 @@ processes:
       - title: movement
         type: integer
         ignore: true
-on-title: split
