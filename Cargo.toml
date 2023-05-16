@@ -14,3 +14,9 @@ yaml-rust = "0.4"
 
 [workspace]
 members = ["sanity"]
+
+[profile.release]
+opt-level = 3
+lto = true
+incremental = true
+codegen-units = 16
