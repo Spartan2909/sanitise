@@ -3,6 +3,7 @@ name = "sanitise"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
+license = "MIT OR Apache-2.0"
 authors = ["<robson.caleb.299@gmailcom> Caleb Robson"]
 
 [lib]

@@ -257,3 +257,18 @@ If no value is specified, the default is `false`.
 
 # Efficiency
 The macro creates linear finite automata to process each column. If `on-invalid` is set to `average` for a given column, that column's automaton will use a state machine to keep track of valid and invalid values. If a column is ignored, no automaton will be generated for it. All data is stored in native Rust types.
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.
