@@ -5,6 +5,9 @@ edition = "2021"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 authors = ["<robson.caleb.299@gmailcom> Caleb Robson"]
+description = "Headache-free data clean-up"
+repository = "https://github.com/Spartan2909/sanitise"
+documentation = "https://docs.rs/sanitise"
 
 [lib]
 proc-macro = true
