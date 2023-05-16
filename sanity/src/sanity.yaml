@@ -27,7 +27,7 @@ processes:
     columns:
       - title: time
         column-type: integer
-        output: "value / 1000"
+        output: "value / 60000"
       - title: pulse
         column-type: integer
         ignore: true
