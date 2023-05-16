@@ -1,5 +1,4 @@
 #![feature(proc_macro_expand)]
-
 #![doc = include_str!("../README.md")]
 
 mod output;
@@ -115,8 +114,7 @@ fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
                     panic!("'average' option for on-{kind} requires key 'valid-streak'")
                 })
                 .into_i64()
-                .map(|n| n.try_into().ok())
-                .flatten()
+                .and_then(|n| n.try_into().ok())
                 .expect("'valid-streak' must be a positive integer");
             OnInvalid::Average(valid_streak)
         }
@@ -411,7 +409,7 @@ fn parse_process(input: Yaml) -> Process {
         .into_vec()
         .expect("'columns' must be an array")
         .into_iter()
-        .map(|yaml| parse_column(yaml))
+        .map(parse_column)
         .collect();
 
     ensure_empty(&input, "process");
@@ -428,7 +426,7 @@ fn parse_program(input: Yaml, csv: Expr) -> Program {
         .into_vec()
         .expect("'processes' must be an array")
         .into_iter()
-        .map(|yaml| parse_process(yaml))
+        .map(parse_process)
         .collect();
 
     let on_title = program
@@ -474,12 +472,12 @@ impl Parse for MacroInput {
 /// Cleans up and validates data.
 /// The first argument must be either a string literal or a macro call that expands to a string literal.
 /// The second argument must be an expression that resolves to a string in CSV format.
-/// 
+///
 /// # Examples
 /// ```
 /// # use std::{fs, iter::zip};
 /// # use sanitise::sanitise;
-/// 
+///
 /// let csv = "time,pulse,movement\n0,67,0\n15,45,1\n126,132,1\n".to_string();
 /// let ((time_millis, pulse, movement),) = sanitise!(
 ///     r#"

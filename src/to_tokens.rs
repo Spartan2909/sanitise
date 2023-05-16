@@ -599,7 +599,7 @@ impl ToTokens for Program {
         let mut process_data = vec![];
         let mut signiature = TokenStream::new();
         for process in &self.processes {
-            let name = format!("process_") + &process.name;
+            let name = format!("process_{}", &process.name);
             let name = Ident::new(&name, Span::mixed_site());
             inner.extend(quote! { let #name = #process; });
 
@@ -612,6 +612,8 @@ impl ToTokens for Program {
         let main_signiature = if self.on_title == OnTitle::Split {
             quote!(Vec<#signiature>)
         } else {
+            // Clippy incorrectly detects this as redundant, but it is used when constructing `process_master`
+            #[allow(clippy::redundant_clone)]
             signiature.clone()
         };
         let header = self.processes[0].header(false);
