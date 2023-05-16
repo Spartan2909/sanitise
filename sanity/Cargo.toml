@@ -1,0 +1,8 @@
+[package]
+name = "sanity"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sanitise = { path = ".." }
+clap = { version = "4.2", features = ["derive"] }

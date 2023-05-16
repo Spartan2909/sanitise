@@ -6,16 +6,11 @@ edition = "2021"
 [lib]
 proc-macro = true
 
-[[bin]]
-name = "sanity"
-required-features = ["bin"]
-
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = "2.0"
 yaml-rust = "0.4"
-clap = { version = "4.2", features = ["derive"], optional = true }
 
-[features]
-bin = ["dep:clap"]
+[workspace]
+members = ["sanity"]

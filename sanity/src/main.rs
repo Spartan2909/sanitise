@@ -1,4 +1,4 @@
-use std::{fs, iter::zip};
+use std::{fs, iter::zip, time::Instant};
 
 use clap::Parser;
 use sanitise::sanitise;
@@ -13,6 +13,8 @@ struct Args {
 }
 
 fn main() {
+    let start = Instant::now();
+
     let args = Args::parse();
     let file_contents = fs::read_to_string(args.file_name).unwrap();
     let result = match sanitise!(include_str!("sanity.yaml"), file_contents) {
@@ -34,4 +36,6 @@ fn main() {
         let _ = fs::write(file_name_raw, buf_raw);
         let _ = fs::write(file_name_processed, buf_processed);
     }
+
+    println!("Time taken: {}ms", start.elapsed().as_millis());
 }
