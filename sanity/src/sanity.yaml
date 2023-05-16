@@ -3,12 +3,12 @@ processes:
   - name: validate
     columns:
       - title: time
-        type: integer
+        column-type: integer
         null-surrogate: -1
         on-null: previous
         null-sentinel: 0
       - title: pulse
-        type: integer
+        column-type: integer
         null-surrogate: -1
         max: 100
         min: 40
@@ -17,7 +17,7 @@ processes:
         on-null: previous
         null-sentinel: 0
       - title: movement
-        type: integer
+        column-type: integer
         null-surrogate: -1
         valid-values: [0, 1]
         output-type: boolean
@@ -26,11 +26,11 @@ processes:
   - name: process
     columns:
       - title: time
-        type: integer
+        column-type: integer
         output: "value / 1000"
       - title: pulse
-        type: integer
+        column-type: integer
         ignore: true
       - title: movement
-        type: integer
+        column-type: integer
         ignore: true

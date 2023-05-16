@@ -28,7 +28,9 @@ fn main() {
 
         let mut buf_raw = "time,pulse,movement\n".to_owned();
         let mut buf_processed = "time,pulse\n".to_owned();
-        for (((time_millis, pulse), movement), time_secs) in zip(zip(zip(time_millis, pulse), movement), time_secs) {
+        for (((time_millis, pulse), movement), time_secs) in
+            zip(zip(zip(time_millis, pulse), movement), time_secs)
+        {
             buf_raw.extend(format!("{time_millis},{pulse},{movement}\n").chars());
             buf_processed.extend(format!("{time_secs},{pulse}\n").chars());
         }

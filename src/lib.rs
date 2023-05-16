@@ -185,8 +185,8 @@ enum Output {
 #[derive(Debug, Clone)]
 struct Column {
     title: String,
-    kind: ColumnType,
-    output_kind: ColumnType,
+    column_type: ColumnType,
+    output_type: ColumnType,
     null_surrogate: Option<Value>,
     valid_values: Option<Vec<Value>>,
     on_invalid: OnInvalid,
@@ -218,9 +218,9 @@ impl Process {
                 continue;
             }
 
-            let kind: Ident = column.output_kind.into();
+            let output_type: Ident = column.output_type.into();
 
-            tokens.extend(quote!(Vec<#kind>,));
+            tokens.extend(quote!(Vec<#output_type>,));
         }
 
         quote!((#tokens))
@@ -321,21 +321,21 @@ fn parse_column(input: Yaml) -> Column {
         .into_string()
         .expect("column title must be a string");
 
-    let kind = input
-        .remove(&Yaml::from_str("type"))
-        .expect("column kind required")
+    let column_type = input
+        .remove(&Yaml::from_str("column-type"))
+        .expect("column type required")
         .into_string()
         .expect("column type must be a string")
         .into();
 
-    let output_kind = input
+    let output_type = input
         .remove(&Yaml::from_str("output-type"))
         .map(|yaml| {
             yaml.into_string()
                 .expect("column type must be a string")
                 .into()
         })
-        .unwrap_or(kind);
+        .unwrap_or(column_type);
 
     let null_surrogate = input
         .remove(&Yaml::from_str("null-surrogate"))
@@ -381,8 +381,8 @@ fn parse_column(input: Yaml) -> Column {
 
     Column {
         title,
-        kind,
-        output_kind,
+        column_type,
+        output_type,
         null_surrogate,
         valid_values,
         on_invalid,

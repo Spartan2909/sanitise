@@ -92,9 +92,9 @@ impl ToTokens for Column {
         let name = Ident::new(&title, Span::call_site());
         let state_name = Ident::new(&(title + "_State"), Span::call_site());
 
-        let kind: Ident = self.kind.into();
+        let column_type: Ident = self.column_type.into();
 
-        let output_kind: Ident = self.output_kind.into();
+        let output_type: Ident = self.output_type.into();
 
         let (state, new_state) = if self.needs_state() {
             tokens.extend(quote! {
@@ -102,7 +102,7 @@ impl ToTokens for Column {
                     Valid,
                     Invalid {
                         missing: usize,
-                        valid_streak: Vec<#output_kind>,
+                        valid_streak: Vec<#output_type>,
                         last_action: Action,
                     },
                 }
@@ -156,7 +156,7 @@ impl ToTokens for Column {
                 quote!(Err(Interrupt::Error(#message.to_owned())))
             }
             OnInvalid::Average(_) => quote! {
-                self.invalid(&#kind::default())
+                self.invalid(&#column_type::default())
             },
             OnInvalid::Delete => quote!(Err(Interrupt::Delete)),
             OnInvalid::Previous(sentinel) => quote! {
@@ -203,7 +203,7 @@ impl ToTokens for Column {
 
         let output = &self.output;
 
-        let two = if self.output_kind == ColumnType::Integer {
+        let two = if self.output_type == ColumnType::Integer {
             quote!(2)
         } else {
             quote!(2.0)
@@ -275,7 +275,7 @@ impl ToTokens for Column {
 
         tokens.extend(quote! {
             struct #name {
-                output: Vec<#output_kind>,
+                output: Vec<#output_type>,
                 #state
             }
 
@@ -284,7 +284,7 @@ impl ToTokens for Column {
                     #name { output: vec![], #new_state }
                 }
 
-                fn invalid(&mut self, value: &#kind) -> Result<(), Interrupt> {
+                fn invalid(&mut self, value: &#column_type) -> Result<(), Interrupt> {
                     #invalid_function
                 }
 
@@ -292,15 +292,15 @@ impl ToTokens for Column {
                     #null_function
                 }
 
-                fn calulate_output(value: &#kind) -> Result<#output_kind, Interrupt> {
+                fn calulate_output(value: &#column_type) -> Result<#output_type, Interrupt> {
                     (#output).map(|v| v.to_owned())
                 }
 
-                fn push_valid(&mut self, value: &#output_kind) {
+                fn push_valid(&mut self, value: &#output_type) {
                     #valid_function
                 }
 
-                fn push(&mut self, value: &#kind) -> Result<(), Interrupt> {
+                fn push(&mut self, value: &#column_type) -> Result<(), Interrupt> {
                     #push_function
                 }
 
@@ -308,7 +308,7 @@ impl ToTokens for Column {
                     #undo_function
                 }
 
-                fn finish(mut self) -> Result<Vec<#output_kind>, Interrupt> {
+                fn finish(mut self) -> Result<Vec<#output_type>, Interrupt> {
                     #finish_function
                 }
             }
@@ -345,7 +345,7 @@ impl ToTokens for Process {
                 function_body.extend(quote!(let mut #automaton_name = #struct_name::new();));
                 automata_names.push((
                     automaton_name,
-                    self.columns[i].kind,
+                    self.columns[i].column_type,
                     self.columns[i].null_surrogate.clone(),
                 ));
             }
@@ -585,13 +585,13 @@ impl ToTokens for Program {
             fn sanitise_transpose<T>(original: Vec<Vec<T>>) -> Vec<Vec<T>> {
                 assert!(!original.is_empty());
                 let mut transposed = (0..original[0].len()).map(|_| vec![]).collect::<Vec<_>>();
-            
+
                 for original_row in original {
                     for (item, transposed_row) in original_row.into_iter().zip(&mut transposed) {
                         transposed_row.push(item);
                     }
                 }
-            
+
                 transposed
             }
         };
