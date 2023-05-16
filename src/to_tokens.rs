@@ -221,6 +221,7 @@ impl ToTokens for Column {
                         for _ in 0..(*missing) {
                             self.output.push(average.to_owned())
                         }
+                        self.output.extend(valid_streak.iter().cloned());
                         self.state = #state_name::Valid;
                     }
                 } else {
@@ -414,7 +415,7 @@ impl ToTokens for Process {
         function_body.extend(quote! {
             for (i, line) in file.iter().enumerate() {
                 if line.len() != #number_of_automata {
-                    return Err(("Invalid line length".to_string(), i + 1));
+                    return Err((format!("Invalid line length: {}", line.len()), i + 1));
                 }
                 #automata_feed
             }
@@ -581,14 +582,17 @@ impl ToTokens for Program {
                 (*value).round()
             }
 
-            fn sanitise_transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>>
-            where
-                T: Clone,
-            {
-                assert!(!v.is_empty());
-                (0..v[0].len())
-                    .map(|i| v.iter().map(|inner| inner[i].clone()).collect::<Vec<T>>())
-                    .collect()
+            fn sanitise_transpose<T>(original: Vec<Vec<T>>) -> Vec<Vec<T>> {
+                assert!(!original.is_empty());
+                let mut transposed = (0..original[0].len()).map(|_| vec![]).collect::<Vec<_>>();
+            
+                for original_row in original {
+                    for (item, transposed_row) in original_row.into_iter().zip(&mut transposed) {
+                        transposed_row.push(item);
+                    }
+                }
+            
+                transposed
             }
         };
 
@@ -660,7 +664,7 @@ impl ToTokens for Program {
             };
 
             let main = |csv: String| -> Result<#main_signiature, (String, usize)> {
-                let lines: Vec<String> = csv
+                let mut lines: Vec<String> = csv
                     .split('\n')
                     .map(|s| {
                         s.strip_suffix("\r")
@@ -668,6 +672,11 @@ impl ToTokens for Program {
                             .to_owned()
                     })
                     .collect();
+                if let Some(line) = lines.last() {
+                    if line.is_empty() {
+                        lines.pop();
+                    }
+                }
 
                 let files: Vec<Vec<Vec<String>>> = lines
                     .split(|line| line == #header)
