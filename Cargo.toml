@@ -2,6 +2,8 @@
 name = "sanitise"
 version = "0.1.0"
 edition = "2021"
+readme = "README.md"
+authors = ["<robson.caleb.299@gmailcom> Caleb Robson"]
 
 [lib]
 proc-macro = true

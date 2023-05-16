@@ -1,5 +1,7 @@
 #![feature(proc_macro_expand)]
 
+#![doc = include_str!("../README.md")]
+
 mod output;
 use output::parse_output;
 mod to_tokens;
@@ -468,6 +470,44 @@ impl Parse for MacroInput {
     }
 }
 
+/// # sanitise
+/// Cleans up and validates data.
+/// The first argument must be either a string literal or a macro call that expands to a string literal.
+/// The second argument must be an expression that resolves to a string in CSV format.
+/// 
+/// # Examples
+/// ```
+/// # use std::{fs, iter::zip};
+/// # use sanitise::sanitise;
+/// 
+/// let csv = "time,pulse,movement\n0,67,0\n15,45,1\n126,132,1\n".to_string();
+/// let ((time_millis, pulse, movement),) = sanitise!(
+///     r#"
+///         processes:
+///           - name: validate
+///             columns:
+///               - title: time
+///                 column-type: integer
+///               - title: pulse
+///                 column-type: integer
+///                 max: 100
+///                 min: 40
+///                 on-invalid: average
+///                 valid-streak: 3
+///               - title: movement
+///                 column-type: integer
+///                 valid-values: [0, 1]
+///                 output-type: boolean
+///                 output: "value == 1"
+///     "#,
+///     csv,
+/// ).unwrap();
+///
+/// println!("time_millis,pulse,movement");
+/// for ((time_millis, pulse), movement) in zip(zip(time_millis, pulse), movement) {
+///     println!("{time_millis},{pulse},{movement}")
+/// }
+/// ```
 #[proc_macro]
 pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as MacroInput);
