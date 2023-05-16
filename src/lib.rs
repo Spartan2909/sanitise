@@ -500,7 +500,7 @@ impl Parse for MacroInput {
 ///                 output-type: boolean
 ///                 output: "value == 1"
 ///     "#,
-///     csv,
+///     csv
 /// ).unwrap();
 ///
 /// println!("time_millis,pulse,movement");
