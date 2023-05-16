@@ -245,7 +245,7 @@ The following functions are provided:
 
 For now, the only provided identifier is `value`, which represents the current value in this column. This may change in the future.
 
-### Ignore
+### Ignore - `ignore`
 
 Optional.
 
