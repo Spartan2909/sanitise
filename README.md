@@ -2,6 +2,10 @@
 
 A library for headache-free data clean-up and validation.
 
+[![crates.io](https://img.shields.io/badge/crates.io-fc8d62?style=for-the-badge&labelColor=555555&logo=rust)](https://crates.io/crates/sanitise) 
+[![github](https://img.shields.io/badge/github-8da0cb?style=for-the-badge&labelColor=555555&logo=github)](https://github.com/Spartan2909/rulox)
+[![docs.rs](https://img.shields.io/badge/docs.rs-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs)](https://docs.rs/sanitise/latest) 
+
 `sanitise` is a CSV processing and validation library that generates code at compile time based on a YAML configuration file. The generated code is robust and will not panic.
 
 ## Quick Start

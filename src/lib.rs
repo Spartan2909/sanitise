@@ -477,8 +477,8 @@ impl Parse for MacroInput {
     }
 }
 
-/// # sanitise
 /// Cleans up and validates data.
+/// 
 /// The first argument must be either a string literal or a macro call that expands to a string literal.
 /// The second argument must be an expression that resolves to a string in CSV format.
 ///
