@@ -158,6 +158,12 @@ enum BinOp {
     Ge,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum UnOp {
+    Negate,
+    Not,
+}
+
 #[derive(Debug, Clone)]
 enum Function {
     Boolean(Box<Output>),
@@ -177,9 +183,12 @@ enum Output {
         right: Box<Output>,
     },
     Function(Function),
-    Identifier(String),
+    Identifier(Ident),
     Literal(Value),
-    Negate(Box<Output>),
+    Unary {
+        operator: UnOp,
+        right: Box<Output>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -370,7 +379,7 @@ fn parse_column(input: Yaml) -> Column {
     let output = input
         .remove(&Yaml::from_str("output"))
         .map(|yaml| parse_output(yaml.into_string().expect("'output' must be a string")))
-        .unwrap_or(Output::Identifier("value".to_owned()));
+        .unwrap_or(Output::Identifier(Ident::new("value", Span::call_site())));
 
     let ignore = input
         .remove(&Yaml::from_str("ignore"))

@@ -1,4 +1,4 @@
-use crate::{BinOp, Function, Output, Value};
+use crate::{BinOp, Function, Output, Value, UnOp};
 
 use std::str::FromStr;
 
@@ -59,7 +59,7 @@ impl Parse for BinOp {
 fn primary(input: ParseStream) -> Result<Output> {
     if input.peek(Ident) {
         let ident: Ident = input.parse()?;
-        Ok(Output::Identifier(ident.to_string()))
+        Ok(Output::Identifier(ident))
     } else if input.peek(LitStr) {
         let lit: LitStr = input.parse()?;
         Ok(Output::Literal(Value::String(lit.value())))
@@ -119,7 +119,17 @@ fn unary(input: ParseStream) -> Result<Output> {
     if input.peek(Token![-]) {
         input.parse::<Token![-]>()?;
         let right = Box::new(unary(input)?);
-        Ok(Output::Negate(right))
+        Ok(Output::Unary {
+            operator: UnOp::Negate,
+            right,
+        })
+    } else if input.peek(Token![!]) {
+        input.parse::<Token![-]>()?;
+        let right = Box::new(unary(input)?);
+        Ok(Output::Unary {
+            operator: UnOp::Not,
+            right,
+        })
     } else {
         function(input)
     }

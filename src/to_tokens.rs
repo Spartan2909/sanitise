@@ -1,5 +1,5 @@
 use crate::{
-    BinOp, Column, ColumnType, Function, OnInvalid, OnTitle, Output, Process, Program, Value,
+    BinOp, Column, ColumnType, Function, OnInvalid, OnTitle, Output, Process, Program, Value, UnOp,
 };
 
 use proc_macro2::{Ident, Span, TokenStream};
@@ -68,6 +68,17 @@ impl ToTokens for BinOp {
     }
 }
 
+impl ToTokens for UnOp {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let inner = match self {
+            UnOp::Negate => quote!(-),
+            UnOp::Not => quote!(!),
+        };
+
+        tokens.extend(inner);
+    }
+}
+
 impl ToTokens for Output {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
@@ -78,11 +89,12 @@ impl ToTokens for Output {
             } => tokens.extend(quote! { Ok(((#left)?) #operator ((#right)?)) }),
             Output::Function(function) => function.to_tokens(tokens),
             Output::Identifier(ident) => {
-                let ident = Ident::new(ident, Span::call_site());
                 tokens.extend(quote!(Ok(#ident.to_owned())));
             }
             Output::Literal(value) => tokens.extend(quote!(Ok(#value))),
-            Output::Negate(output) => tokens.extend(quote! { Ok(-((#output)?)) }),
+            Output::Unary { operator, right, } => {
+                tokens.extend(quote! { Ok(#operator((#right)?)) })
+            },
         }
     }
 }
