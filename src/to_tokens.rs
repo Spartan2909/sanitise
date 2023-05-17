@@ -4,6 +4,7 @@ use crate::{
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
+use syn::Index;
 
 struct ValueList<'a>(&'a Vec<Value>);
 
@@ -327,7 +328,7 @@ impl ToTokens for Process {
         }
 
         let mut function_body = quote! {
-            if file.is_empty() {
+            if file.0.is_empty() {
                 return Err(("Empty file".to_string(), 1));
             }
         };
@@ -338,108 +339,141 @@ impl ToTokens for Process {
             .zip(self.ignores())
             .enumerate()
         {
-            if !ignore {
+            if ignore {
+                automata_names.push(None);
+            } else {
                 let automaton_name = Ident::new(&format!("automaton_{i}"), Span::call_site());
                 let title = format!("Column_{struct_name}");
                 let struct_name = Ident::new(&title, Span::call_site());
                 function_body.extend(quote!(let mut #automaton_name = #struct_name::new();));
-                automata_names.push((
+                automata_names.push(Some((
                     automaton_name,
-                    self.columns[i].column_type,
                     self.columns[i].null_surrogate.clone(),
-                ));
+                )));
             }
         }
 
         let mut automata_feed = TokenStream::new();
         let mut undo = TokenStream::new();
-        for (i, (automaton_name, input_type, null_surrogate)) in automata_names.iter().enumerate() {
-            let input_type: Ident = input_type.into();
-            let input_type = input_type.to_string();
-
-            let push = quote! {
-                if let Err(interrupt) = #automaton_name.push(&tmp) {
-                    match interrupt {
-                        Interrupt::Delete => {
-                            #undo
-                            continue;
+        for (i, details) in automata_names.iter().enumerate() {
+            let i = Index::from(i);
+            if let Some((automaton_name, null_surrogate)) = details {
+                let push = quote! {
+                    if let Err(interrupt) = #automaton_name.push(&tmp) {
+                        match interrupt {
+                            Interrupt::Delete => {
+                                #undo
+                                continue;
+                            }
+                            Interrupt::Error(s) => return Err((s, i + 1)),
                         }
-                        Interrupt::Error(s) => return Err((s, i + 1)),
                     }
-                }
-            };
+                };
 
-            let on_null = quote! {
-                if let Err(interrupt) = #automaton_name.null() {
-                    match interrupt {
-                        Interrupt::Delete => {
-                            #undo
-                            continue;
+                let on_null = quote! {
+                    if let Err(interrupt) = #automaton_name.null() {
+                        match interrupt {
+                            Interrupt::Delete => {
+                                #undo
+                                continue;
+                            }
+                            Interrupt::Error(s) => return Err((s, i + 1)),
                         }
-                        Interrupt::Error(s) => return Err((s, i + 1)),
                     }
-                }
-            };
+                };
 
-            let push = if let Some(surrogate) = null_surrogate {
-                quote! {
-                    if tmp == #surrogate.to_owned() {
-                        #on_null
-                    } else {
+                let push = if let Some(surrogate) = null_surrogate {
+                    quote! {
+                        if tmp == #surrogate.to_owned() {
+                            #on_null
+                        } else {
+                            #push
+                        }
+                    }
+                } else {
+                    push
+                };
+
+                automata_feed.extend(quote! {
+                    if let Some(tmp) = (file.#i)[i] {
                         #push
                     }
-                }
-            } else {
-                push
-            };
+                    else {
+                        #on_null
+                    }
+                });
 
-            automata_feed.extend(quote! {
-                if line[#i].is_empty() {
-                    #on_null
-                } else {
-                    let tmp = match line[#i].parse() {
-                        Ok(v) => v,
-                        Err(_) => {
-                            let message = format!("Invalid base for {}: {}", #input_type, line[#i]);
-                            return Err((message, i + 1));
-                        }
-                    };
-                    #push
-                }
-            });
-
-            undo.extend(quote!(#automaton_name.undo();));
+                undo.extend(quote!(#automaton_name.undo();));
+            }
         }
 
-        let number_of_automata = self.columns.len();
         function_body.extend(quote! {
-            for (i, line) in file.iter().enumerate() {
-                if line.len() != #number_of_automata {
-                    return Err((format!("Invalid line length: {}", line.len()), i + 1));
-                }
+            for i in 0..(file.0.len()) {
                 #automata_feed
             }
         });
 
+        let mut input_type = TokenStream::new();
+        let mut parse_return = TokenStream::new();
+        for column in &self.columns {
+            let column_type: Ident = column.column_type.into();
+            input_type.extend(quote!(&[Option<#column_type>],));
+            parse_return.extend(quote!(Vec<Option<#column_type>>,));
+        }
+
         let mut return_value = TokenStream::new();
-        for (i, (automaton_name, _, _)) in automata_names.iter().enumerate() {
-            let result_name = Ident::new(&format!("result_{i}"), Span::call_site());
-            function_body.extend(quote! {
-                let #result_name = match #automaton_name.finish() {
-                    Ok(v) => v,
-                    Err(interrupt) => Err((interrupt.extract_error(), file.len()))?,
-                };
-            });
-            return_value.extend(quote!(#result_name,));
+        for (i, details) in automata_names.iter().enumerate() {
+            if let Some((automaton_name, _)) = details {
+                let result_name = Ident::new(&format!("result_{i}"), Span::call_site());
+                function_body.extend(quote! {
+                    let #result_name = match #automaton_name.finish() {
+                        Ok(v) => v,
+                        Err(interrupt) => Err((interrupt.extract_error(), file.0.len()))?,
+                    };
+                });
+                return_value.extend(quote!(#result_name,));
+            }
         }
 
         function_body.extend(quote!(Ok((#return_value))));
 
+        let mut parse_function_declarations = TokenStream::new();
+        let num_columns = automata_names.len();
+        let mut parse_function_body = quote! {
+            if line.len() != #num_columns {
+                return Err((format!("Invalid line length: {}", line.len()), i))
+            }
+        };
+        let mut parse_function_return = TokenStream::new();
+        for i in 0..num_columns {
+            let column_name = Ident::new(&format!("column_{i}"), Span::call_site());
+            parse_function_declarations.extend(quote!(let mut #column_name = vec![];));
+            parse_function_body.extend(quote! {
+                if line[#i].is_empty() {
+                    #column_name.push(None);
+                } else {
+                    #column_name.push(match line[#i].parse() {
+                        Ok(v) => Some(v),
+                        Err(_) => return Err((format!("failed to parse {}", line[#i]), i)),
+                    });
+                }
+            });
+            parse_function_return.extend(quote!(#column_name,));
+        }
+
         let signiature = self.signiature();
         inner.extend(quote! {
-            |file: &[Vec<String>]| -> Result<#signiature, (String, usize)> {
+            let process = |file: (#input_type)| -> Result<#signiature, (String, usize)> {
                 #function_body
-            }
+            };
+            let parse = |file: &[Vec<String>]| -> Result<(#parse_return), (String, usize)> {
+                #parse_function_declarations
+                for (i, line) in file.iter().enumerate() {
+                    #parse_function_body
+                }
+                Ok((#parse_function_return))
+            };
+            (process, parse)
         });
 
         tokens.extend(quote! { { #inner } });
@@ -462,7 +496,7 @@ impl ToTokens for Program {
                     if let Interrupt::Error(message) = self {
                         message
                     } else {
-                        panic!("Attempted to extract error from 'Delete'")
+                        panic!("attempted to extract error from 'Delete'")
                     }
                 }
             }
@@ -598,10 +632,15 @@ impl ToTokens for Program {
 
         let mut process_data = vec![];
         let mut signiature = TokenStream::new();
-        for process in &self.processes {
+        for (i, process) in self.processes.iter().enumerate() {
             let name = format!("process_{}", &process.name);
             let name = Ident::new(&name, Span::mixed_site());
-            inner.extend(quote! { let #name = #process; });
+
+            if i == 0 {
+                inner.extend(quote! { let (#name, parse_file) = #process; });
+            } else {
+                inner.extend(quote! { let (#name, _) = #process; });
+            }
 
             process_data.push((name, process.column_names(), process.ignores()));
 
@@ -618,28 +657,37 @@ impl ToTokens for Program {
         };
         let header = self.processes[0].header(false);
 
-        let mut process_function = TokenStream::new();
+        let mut initial_assignment_target = TokenStream::new();
+        let mut args = TokenStream::new();
+        for i in 0..process_data[0].1.len() {
+            let input_name = Ident::new(&format!("item_{i}"), Span::call_site());
+            initial_assignment_target.extend(quote!(#input_name,));
+            args.extend(quote!(&#input_name,));
+        }
+
+        let mut process_function = quote! {
+            let (#initial_assignment_target) = parse_file(file)?;
+        };
         let mut process_function_return = TokenStream::new();
 
-        let mut args = quote!(&file);
+        let mut args = quote!((#args));
         for (i, (process_name, column_names, ignores)) in process_data.iter().enumerate() {
             let mut assignment_target = TokenStream::new();
-            let mut stringed = TokenStream::new();
+            let mut inputs = TokenStream::new();
             let mut returns = TokenStream::new();
             for (column_name, &ignored) in column_names.iter().zip(ignores) {
                 if !ignored {
-                    let column_name = Ident::new(
-                        &(column_name.to_string() + "_" + &i.to_string()),
-                        Span::call_site(),
-                    );
+                    let column_name = Ident::new(&format!("{column_name}_{i}"), Span::call_site());
                     assignment_target.extend(quote!(#column_name,));
-                    stringed.extend(quote!(#column_name.iter().map(|item| ToString::to_string(item)).collect(),));
+                    inputs.extend(
+                        quote!(&Vec::from_iter(#column_name.iter().map(|x| Some(x.to_owned()))),),
+                    );
                     returns.extend(quote!(#column_name,));
                 }
             }
             process_function.extend(quote! { let (#assignment_target) = #process_name(#args)?; });
 
-            args = quote!(&sanitise_transpose(vec![#stringed]));
+            args = quote!((#inputs));
 
             process_function_return.extend(quote!((#returns),));
         }

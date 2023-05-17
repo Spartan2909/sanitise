@@ -32,5 +32,5 @@ processes:
         column-type: integer
         ignore: true
       - title: movement
-        column-type: integer
+        column-type: boolean
         ignore: true
