@@ -235,7 +235,7 @@ Optional.
 
 An expression used to calculate the result.
 
-The permitted operations are `+`, `-` (both binary and unary), `*`, `/`, and `%`.
+The permitted operations are `+`, `-` (both binary and unary), `*`, `/`, `%`, and `!`.
 
 The following functions are provided:
 - `boolean`: Convert the argument to a Boolean. Numbers will be `false` if they are equal to 0, and `true` otherwise. Strings will be `false` if they are empty, and `true` otherwise.
@@ -245,11 +245,15 @@ The following functions are provided:
 
 For now, the only provided identifier is `value`, which represents the current value in this column. This may change in the future.
 
+Note that this operation is not applied on an invalid value or null entry.
+
+If no expression is specified, the default is the current value in this column.
+
 ### Ignore - `ignore`
 
 Optional.
 
-Whether to ignore this column, and exclude it from the output of this process.
+Whether to ignore this column and exclude it from the output of this process.
 
 If this is set to `true`, all other settings for the column will be disregarded.
 
@@ -257,6 +261,8 @@ If no value is specified, the default is `false`.
 
 # Efficiency
 The macro creates linear finite automata to process each column. If `on-invalid` is set to `average` for a given column, that column's automaton will use a state machine to keep track of valid and invalid values. If a column is ignored, no automaton will be generated for it. All data is stored in native Rust types.
+
+---
 
 ## License
 
