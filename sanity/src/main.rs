@@ -17,10 +17,18 @@ fn main() {
 
     let args = Args::parse();
     let file_contents = fs::read_to_string(args.file_name).unwrap();
+
+    println!("Got CSV contents: {}ms", start.elapsed().as_millis());
+    let before_sanitise = Instant::now();
+
     let result = match sanitise!(include_str!("sanity.yaml"), file_contents) {
         Ok(v) => v,
         Err((message, line)) => panic!("{message} at line {line}"),
     };
+
+    println!("Processed: {}ms", before_sanitise.elapsed().as_millis());
+    let before_file_write = Instant::now();
+
     for (i, ((time_millis, pulse, movement), (time_secs,))) in result.into_iter().enumerate() {
         let file_name_base = args.output_file_name.to_owned() + &format!("_{}", i + 1);
         let file_name_raw = file_name_base.to_owned() + "_raw.csv";
@@ -39,5 +47,9 @@ fn main() {
         let _ = fs::write(file_name_processed, buf_processed);
     }
 
-    println!("Time taken: {}ms", start.elapsed().as_millis());
+    println!(
+        "Wrote to output files: {}ms",
+        before_file_write.elapsed().as_millis()
+    );
+    println!("Total time taken: {}ms", start.elapsed().as_millis());
 }
