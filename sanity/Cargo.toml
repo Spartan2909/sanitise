@@ -1,7 +1,8 @@
 [package]
 name = "sanity"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
+authors.workspace = true
 
 [dependencies]
 sanitise = { path = ".." }
