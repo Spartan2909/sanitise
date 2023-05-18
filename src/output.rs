@@ -1,4 +1,4 @@
-use crate::{BinOp, Function, Output, Value, UnOp};
+use crate::{BinOp, Function, Output, UnOp, Value};
 
 use std::str::FromStr;
 
