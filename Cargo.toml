@@ -8,6 +8,8 @@ authors.workspace = true
 description = "Headache-free data clean-up"
 repository = "https://github.com/Spartan2909/sanitise"
 documentation = "https://docs.rs/sanitise"
+keywords = ["data-processing", "clean-up"]
+categories = ["no-std", "parser-implementations"]
 
 [lib]
 proc-macro = true
