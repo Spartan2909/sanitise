@@ -1,4 +1,6 @@
-use std::{fs, iter::zip, process::ExitCode, time::Instant};
+#[cfg(feature = "benchmark")]
+use std::time::Instant;
+use std::{fs, iter::zip, process::ExitCode};
 
 use clap::Parser;
 use sanitise::sanitise;
@@ -14,13 +16,17 @@ struct Args {
 
 fn main() -> ExitCode {
     println!("Starting...");
+    #[cfg(feature = "benchmark")]
     let start = Instant::now();
 
     let args = Args::parse();
 
     println!("Getting CSV contents...");
     let file_contents = fs::read_to_string(args.file_name).unwrap();
+
+    #[cfg(feature = "benchmark")]
     println!("Got CSV contents: {}ms", start.elapsed().as_millis());
+    #[cfg(feature = "benchmark")]
     let before_sanitise = Instant::now();
 
     println!("Processing CSV...");
@@ -32,11 +38,14 @@ fn main() -> ExitCode {
         }
     };
 
+    #[cfg(feature = "benchmark")]
     println!("Processed CSV: {}ms", before_sanitise.elapsed().as_millis());
+    #[cfg(feature = "benchmark")]
     let before_file_writes = Instant::now();
 
     println!("Writing to output files...");
     for (i, ((time_millis, pulse, movement), (time_mins,))) in result.into_iter().enumerate() {
+        #[cfg(feature = "benchmark")]
         let before_file_write = Instant::now();
 
         let file_name_base = args.output_file_name.to_owned() + &format!("_{}", i + 1);
@@ -55,6 +64,7 @@ fn main() -> ExitCode {
         let _ = fs::write(file_name_raw, buf_raw);
         let _ = fs::write(file_name_processed, buf_processed);
 
+        #[cfg(feature = "benchmark")]
         println!(
             "Wrote to file {}: {}ms",
             i + 1,
@@ -62,12 +72,14 @@ fn main() -> ExitCode {
         );
     }
 
+    #[cfg(feature = "benchmark")]
     println!(
         "Wrote to output files: {}ms",
         before_file_writes.elapsed().as_millis()
     );
 
     println!("Done");
+    #[cfg(feature = "benchmark")]
     println!("Total time taken: {}ms", start.elapsed().as_millis());
 
     ExitCode::SUCCESS
