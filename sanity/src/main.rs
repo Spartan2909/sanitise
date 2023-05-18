@@ -55,7 +55,11 @@ fn main() -> ExitCode {
         let _ = fs::write(file_name_raw, buf_raw);
         let _ = fs::write(file_name_processed, buf_processed);
 
-        println!("Wrote to file {}: {}ms", i + 1, before_file_write.elapsed().as_millis());
+        println!(
+            "Wrote to file {}: {}ms",
+            i + 1,
+            before_file_write.elapsed().as_millis()
+        );
     }
 
     println!(
