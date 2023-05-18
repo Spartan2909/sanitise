@@ -1,5 +1,5 @@
 use crate::{
-    BinOp, Column, ColumnType, Function, OnInvalid, OnTitle, Output, Process, Program, Value, UnOp,
+    BinOp, Column, ColumnType, Function, OnInvalid, OnTitle, Output, Process, Program, UnOp, Value,
 };
 
 use proc_macro2::{Ident, Span, TokenStream};
@@ -35,13 +35,13 @@ impl ToTokens for Value {
 impl ToTokens for Function {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let inner = match self {
-            Function::Boolean(arg) => quote! { SanitiseConversions::to_bool(&(#arg)) },
-            Function::Ceiling(arg) => quote! { Ok(sanitise_ceiling(&(#arg))) },
-            Function::Floor(arg) => quote! { Ok(sanitise_floor(&(#arg))) },
-            Function::Integer(arg) => quote! { SanitiseConversions::to_int(&(#arg)) },
-            Function::Real(arg) => quote! { SanitiseConversions::to_float(&(#arg)) },
-            Function::Round(arg) => quote! { Ok(sanitise_round(&(#arg))) },
-            Function::String(arg) => quote! { SanitiseConversions::to_string(&(#arg)) },
+            Function::Boolean(arg) => quote! { SanitiseConversions::to_bool(&((#arg)?)) },
+            Function::Ceiling(arg) => quote! { Ok(sanitise_ceiling(&((#arg)?))) },
+            Function::Floor(arg) => quote! { Ok(sanitise_floor(&((#arg)?))) },
+            Function::Integer(arg) => quote! { SanitiseConversions::to_int(&((#arg)?)) },
+            Function::Real(arg) => quote! { SanitiseConversions::to_float(&((#arg)?)) },
+            Function::Round(arg) => quote! { Ok(sanitise_round(&((#arg)?))) },
+            Function::String(arg) => quote! { SanitiseConversions::to_string(&((#arg)?)) },
         };
 
         tokens.extend(inner);
@@ -92,9 +92,7 @@ impl ToTokens for Output {
                 tokens.extend(quote!(Ok(#ident.to_owned())));
             }
             Output::Literal(value) => tokens.extend(quote!(Ok(#value))),
-            Output::Unary { operator, right, } => {
-                tokens.extend(quote! { Ok(#operator((#right)?)) })
-            },
+            Output::Unary { operator, right } => tokens.extend(quote! { Ok(#operator((#right)?)) }),
         }
     }
 }
@@ -209,12 +207,12 @@ impl ToTokens for Column {
             });
         }
 
+        let output = &self.output;
+
         push_function.extend(quote! {
-            self.push_valid(&Self::calulate_output(value)?);
+            self.push_valid((#output)?);
             Ok(())
         });
-
-        let output = &self.output;
 
         let two = if self.output_type == ColumnType::Integer {
             quote!(2)
@@ -225,7 +223,7 @@ impl ToTokens for Column {
         let valid_function = if let OnInvalid::Average(valid_streak) = self.on_invalid {
             quote! {
                 if let #state_name::Invalid { missing, valid_streak, last_action } = &mut self.state {
-                    valid_streak.push(value.to_owned());
+                    valid_streak.push(value);
                     *last_action = Action::AppendValid;
                     if valid_streak.len() >= #valid_streak {
                         let before_invalid_streak = self.output.last().unwrap_or(&valid_streak[0]);
@@ -238,12 +236,12 @@ impl ToTokens for Column {
                         self.state = #state_name::Valid;
                     }
                 } else {
-                    self.output.push(value.to_owned());
+                    self.output.push(value);
                 }
             }
         } else {
             quote! {
-                self.output.push(value.to_owned());
+                self.output.push(value);
             }
         };
 
@@ -305,11 +303,7 @@ impl ToTokens for Column {
                     #null_function
                 }
 
-                fn calulate_output(value: &#column_type) -> Result<#output_type, Interrupt> {
-                    (#output).map(|v| v.to_owned())
-                }
-
-                fn push_valid(&mut self, value: &#output_type) {
+                fn push_valid(&mut self, value: #output_type) {
                     #valid_function
                 }
 
@@ -519,14 +513,14 @@ impl ToTokens for Program {
                 IncrementInvalid,
             }
 
-            trait SantitiseConversions {
+            trait SanitiseConversions {
                 fn to_bool(&self) -> Result<bool, Interrupt>;
                 fn to_float(&self) -> Result<f64, Interrupt>;
                 fn to_int(&self) -> Result<i64, Interrupt>;
                 fn to_string(&self) -> Result<String, Interrupt>;
             }
 
-            impl SantitiseConversions for bool {
+            impl SanitiseConversions for bool {
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(*self)
                 }
@@ -552,7 +546,7 @@ impl ToTokens for Program {
                 }
             }
 
-            impl SantitiseConversions for f64 {
+            impl SanitiseConversions for f64 {
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(self != &0.0)
                 }
@@ -570,7 +564,7 @@ impl ToTokens for Program {
                 }
             }
 
-            impl SantitiseConversions for i64 {
+            impl SanitiseConversions for i64 {
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(self != &0)
                 }
@@ -588,7 +582,7 @@ impl ToTokens for Program {
                 }
             }
 
-            impl SantitiseConversions for String {
+            impl SanitiseConversions for String {
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(!self.is_empty())
                 }
@@ -627,20 +621,7 @@ impl ToTokens for Program {
             fn sanitise_round(value: &f64) -> f64 {
                 (*value).round()
             }
-
-            fn sanitise_transpose<T>(original: Vec<Vec<T>>) -> Vec<Vec<T>> {
-                assert!(!original.is_empty());
-                let mut transposed = (0..original[0].len()).map(|_| vec![]).collect::<Vec<_>>();
-
-                for original_row in original {
-                    for (item, transposed_row) in original_row.into_iter().zip(&mut transposed) {
-                        transposed_row.push(item);
-                    }
-                }
-
-                transposed
-            }
-        };
+        });
 
         let mut process_data = vec![];
         let mut signiature = TokenStream::new();
