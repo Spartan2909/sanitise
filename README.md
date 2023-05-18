@@ -81,6 +81,10 @@ time,pulse,movement
 
 The first argument to `sanitise!` must be either a string literal or a macro call that expands to a string literal. The second argument must be an expression that resolves to a string in CSV format. In the above example, `sanitise_config.yaml` must be next to `main.rs`, and `data.csv` must be in the working directory at runtime.
 
+## Features
+
+- `benchmark`: Print the time taken to complete various stages of the process. Disables `no_std` support. You probably don't want this.
+
 # Configuration Specification
 
 ## Root Fields

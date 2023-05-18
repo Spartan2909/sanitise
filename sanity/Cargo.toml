@@ -5,5 +5,5 @@ edition = "2021"
 authors.workspace = true
 
 [dependencies]
-sanitise = { path = ".." }
+sanitise = { path = "..", features = ["benchmark"] }
 clap = { version = "4.2", features = ["derive"] }

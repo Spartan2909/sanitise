@@ -489,8 +489,20 @@ impl ToTokens for Process {
 impl ToTokens for Program {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let csv = &self.csv;
+
+        #[cfg(feature = "benchmark")]
         let mut inner = quote! {
-            use ::std::prelude::rust_2021::*;
+            #[cfg(debug_assertions)]
+            use ::std::{time::Instant, println};
+        };
+
+        #[cfg(not(feature = "benchmark"))]
+        let mut inner = TokenStream::new();
+
+        inner.extend(quote! {
+            extern crate alloc;
+            use ::core::prelude::rust_2021::*;
+            use alloc::{boxed::Box, vec, vec::Vec};
 
             enum Interrupt {
                 Delete,
@@ -658,9 +670,17 @@ impl ToTokens for Program {
             args.extend(quote!(&#input_name,));
         }
 
+        #[cfg(feature = "benchmark")]
         let mut process_function = quote! {
-            let (#initial_assignment_target) = parse_file(file)?;
+            let start_time = Instant::now();
         };
+
+        #[cfg(not(feature = "benchmark"))]
+        let mut process_function = TokenStream::new();
+
+        process_function.extend(quote! {
+            let (#initial_assignment_target) = parse_file(file)?;
+        });
         let mut process_function_return = TokenStream::new();
 
         let mut args = quote!((#args));
@@ -685,11 +705,24 @@ impl ToTokens for Program {
             process_function_return.extend(quote!((#returns),));
         }
 
+        #[cfg(feature = "benchmark")]
+        process_function.extend(quote! {
+            println!("Process function finished: {}ms", start_time.elapsed().as_millis());
+        });
+
         process_function.extend(quote!(Ok((#process_function_return))));
 
-        let end_of_main = if self.on_title == OnTitle::Split {
+        #[cfg(feature = "benchmark")]
+        let start_of_main = quote! {
+            let start_time = Instant::now();
+        };
+
+        #[cfg(not(feature = "benchmark"))]
+        let start_of_main = TokenStream::new();
+
+        let mut end_of_main = if self.on_title == OnTitle::Split {
             quote! {
-                files[1..].iter().map(|file| process_master(file)).collect()
+                let result = files[1..].iter().map(|file| process_master(file)).collect();
             }
         } else {
             quote! {
@@ -697,9 +730,26 @@ impl ToTokens for Program {
                     return Err(("Found extra set of headers".to_owned(), files[1].len() + 1))
                 }
 
-                process_master(&files[1])
+                let result = process_master(&files[1]);
             }
         };
+
+        #[cfg(feature = "benchmark")]
+        end_of_main.extend(quote! {
+            println!("Main function finished: {}ms", start_time.elapsed().as_millis());
+            result
+        });
+
+        #[cfg(not(feature = "benchmark"))]
+        end_of_main.extend(quote!(result));
+
+        #[cfg(feature = "benchmark")]
+        let file_gen_benchmark = quote! {
+            println!("Split input into files: {}ms", start_time.elapsed().as_millis());
+        };
+
+        #[cfg(not(feature = "benchmark"))]
+        let file_gen_benchmark = TokenStream::new();
 
         inner.extend(quote! {
             let process_master = |file: &[Vec<String>]| -> Result<#signiature, (String, usize)> {
@@ -707,6 +757,8 @@ impl ToTokens for Program {
             };
 
             let main = |csv: String| -> Result<#main_signiature, (String, usize)> {
+                #start_of_main
+
                 let mut lines: Vec<String> = csv
                     .split('\n')
                     .map(|s| {
@@ -732,6 +784,8 @@ impl ToTokens for Program {
                             .collect()
                     })
                     .collect();
+
+                #file_gen_benchmark
 
                 #end_of_main
             };
