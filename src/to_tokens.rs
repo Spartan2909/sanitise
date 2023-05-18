@@ -21,6 +21,13 @@ impl<'a> ToTokens for ValueList<'a> {
     }
 }
 
+impl ToTokens for ColumnType {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let ident: Ident = self.into();
+        ident.to_tokens(tokens);
+    }
+}
+
 impl ToTokens for Value {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
@@ -89,7 +96,7 @@ impl ToTokens for Output {
             } => tokens.extend(quote! { Ok(((#left)?) #operator ((#right)?)) }),
             Output::Function(function) => function.to_tokens(tokens),
             Output::Identifier(ident) => {
-                tokens.extend(quote!(Ok(#ident.to_owned())));
+                tokens.extend(quote!(Ok(#ident.unwrap().to_owned())));
             }
             Output::Literal(value) => tokens.extend(quote!(Ok(#value))),
             Output::Unary { operator, right } => tokens.extend(quote! { Ok(#operator((#right)?)) }),
@@ -210,6 +217,7 @@ impl ToTokens for Column {
         let output = &self.output;
 
         push_function.extend(quote! {
+            let value = Some(value);
             self.push_valid((#output)?);
             Ok(())
         });
@@ -284,6 +292,11 @@ impl ToTokens for Column {
             quote!(Ok(self.output))
         };
 
+        let mut push_function_params = TokenStream::new();
+        for (name, column_type) in &self.process_columns {
+            push_function_params.extend(quote!(#name: Option<&#column_type>,));
+        }
+
         tokens.extend(quote! {
             struct #name {
                 output: Vec<#output_type>,
@@ -307,7 +320,7 @@ impl ToTokens for Column {
                     #valid_function
                 }
 
-                fn push(&mut self, value: &#column_type) -> Result<(), Interrupt> {
+                fn push(&mut self, value: &#column_type, #push_function_params) -> Result<(), Interrupt> {
                     #push_function
                 }
 
@@ -362,10 +375,20 @@ impl ToTokens for Process {
         let mut automata_feed = TokenStream::new();
         let mut undo = TokenStream::new();
         for (i, details) in automata_names.iter().enumerate() {
+            let mut args = TokenStream::new();
+            for j in 0..automata_names.len() {
+                if i == j {
+                    continue;
+                }
+
+                let j = Index::from(j);
+                args.extend(quote!(file.#j[i].as_ref(),));
+            }
+
             let i = Index::from(i);
             if let Some((automaton_name, null_surrogate)) = details {
                 let push = quote! {
-                    if let Err(interrupt) = #automaton_name.push(&tmp) {
+                    if let Err(interrupt) = #automaton_name.push(&tmp, #args) {
                         match interrupt {
                             Interrupt::Delete => {
                                 #undo

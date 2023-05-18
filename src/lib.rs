@@ -5,7 +5,7 @@ mod output;
 use output::parse_output;
 mod to_tokens;
 
-use std::{collections::VecDeque, fmt};
+use std::{collections::VecDeque, fmt, iter::zip};
 
 extern crate proc_macro;
 
@@ -204,6 +204,7 @@ struct Column {
     min: Option<Value>,
     output: Output,
     ignore: bool,
+    process_columns: Vec<(Ident, ColumnType)>,
 }
 
 impl Column {
@@ -236,13 +237,17 @@ impl Process {
     }
 
     fn column_names(&self) -> Vec<Ident> {
-        let mut column_names = vec![];
+        self.columns
+            .iter()
+            .map(|column| Ident::new(&column.title, Span::call_site()))
+            .collect()
+    }
 
-        for column in &self.columns {
-            column_names.push(Ident::new(&column.title, Span::call_site()));
-        }
-
-        column_names
+    fn column_types(&self) -> Vec<ColumnType> {
+        self.columns
+            .iter()
+            .map(|column| column.column_type)
+            .collect()
     }
 
     fn header(&self, trailing_comma: bool) -> String {
@@ -400,6 +405,7 @@ fn parse_column(input: Yaml) -> Column {
         min,
         output,
         ignore,
+        process_columns: vec![],
     }
 }
 
@@ -423,7 +429,21 @@ fn parse_process(input: Yaml) -> Process {
 
     ensure_empty(&input, "process");
 
-    Process { name, columns }
+    let mut process = Process { name, columns };
+
+    let names = process.column_names();
+    let column_types = process.column_types();
+    for (i, (name, column_type)) in zip(names, column_types).enumerate() {
+        for (j, column) in process.columns.iter_mut().enumerate() {
+            if i == j {
+                continue;
+            }
+
+            column.process_columns.push((name.clone(), column_type));
+        }
+    }
+
+    process
 }
 
 fn parse_program(input: Yaml, csv: Expr) -> Program {
@@ -456,23 +476,25 @@ struct MacroInput {
     config: LitStr,
     _comma: Token![,],
     csv: Expr,
+    _final_comma: Option<Token![,]>,
 }
 
 impl Parse for MacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let config: Expr = input.parse()?;
-        let _comma = input.parse()?;
-        let csv = input.parse()?;
-
         let tokens: proc_macro::TokenStream = config.to_token_stream().into();
         let tokens = tokens.expand_expr().unwrap_or_else(|err| panic!("{err}"));
-
         let config = parse(tokens)?;
+
+        let _comma = input.parse()?;
+        let csv = input.parse()?;
+        let _final_comma = input.parse()?;
 
         Ok(MacroInput {
             config,
             _comma,
             csv,
+            _final_comma,
         })
     }
 }
@@ -507,7 +529,7 @@ impl Parse for MacroInput {
 ///                 output-type: boolean
 ///                 output: "value == 1"
 ///     "#,
-///     csv
+///     csv,
 /// ).unwrap();
 ///
 /// println!("time_millis,pulse,movement");

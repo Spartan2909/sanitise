@@ -164,7 +164,7 @@ The following functions are provided:
 - `real`: Convert the argument to a float. Booleans will be 1.0 if they are `true` and 0.0 if they are `false`. Strings will be parsed into an float, and return an error if the parsing fails. Note that very large integers may lose precison when converted to floats.
 - `string`: Convert the argument to a string. All values will simply be converted to a textual representation.
 
-For now, the only provided identifier is `value`, which represents the current value in this column. This may change in the future.
+The `value` identifier refers to the current value in this column. To refer to the current value in another column, prefix that column's name with `value_`. For example, if you wanted to refer to the current value in the 'pulse' column, you would use the identifier `value_pulse`. Note that this refers to the raw (unprocessed) value in that column. Note that if the entry is null, this access will panic. This behaviour may change in the future.
 
 Note that this operation is not applied on an invalid value or null entry.
 
