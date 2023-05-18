@@ -46,7 +46,7 @@ Required.
 
 Describes the operations on the columns in a file.
 
-A specification of the contents of each column can be found under [Columns](#columns);
+A specification of the contents of each column can be found under [Columns](#columns).
 
 The entries correspond to the columns in the input file if they are in the first process, or columns from the previous process otherwise. The titles of the columns in the first process must match the titles of the columns in the input file.
 
