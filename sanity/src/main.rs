@@ -1,4 +1,4 @@
-#[cfg(feature = "benchmark")]
+#[cfg(feature = "minimal_benchmark")]
 use std::time::Instant;
 use std::{fs, iter::zip, process::ExitCode};
 
@@ -14,9 +14,17 @@ struct Args {
     output_file_name: String,
 }
 
+fn extend_buf(buf: &mut String, string: &str) {
+    if buf.len() + string.len() > buf.capacity() {
+        buf.reserve(1024);
+    }
+
+    buf.extend(string.chars());
+}
+
 fn main() -> ExitCode {
     println!("Starting...");
-    #[cfg(feature = "benchmark")]
+    #[cfg(feature = "minimal_benchmark")]
     let start = Instant::now();
 
     let args = Args::parse();
@@ -30,13 +38,18 @@ fn main() -> ExitCode {
     let before_sanitise = Instant::now();
 
     println!("Processing CSV...");
-    let result = match sanitise!(include_str!("sanity.yaml"), file_contents) {
-        Ok(v) => v,
-        Err((message, line)) => {
-            eprintln!("Line {line}: {message}");
-            return ExitCode::FAILURE;
-        }
-    };
+
+    // Type hints are not necessary for this to compile,
+    // but rust-analyzer can't detect the type,
+    // so this allows it to insert inline type hints later
+    let result: Vec<((Vec<i64>, Vec<i64>, Vec<bool>), (Vec<i64>,))> =
+        match sanitise!(include_str!("sanity.yaml"), &file_contents) {
+            Ok(v) => v,
+            Err((message, line)) => {
+                eprintln!("Line {line}: {message}");
+                return ExitCode::FAILURE;
+            }
+        };
 
     #[cfg(feature = "benchmark")]
     println!("Processed CSV: {}ms", before_sanitise.elapsed().as_millis());
@@ -52,13 +65,18 @@ fn main() -> ExitCode {
         let file_name_raw = file_name_base.to_owned() + "_raw.csv";
         let file_name_processed = file_name_base + "_processed.csv";
 
-        let mut buf_raw = "time,pulse,movement\n".to_owned();
-        let mut buf_processed = "time,pulse\n".to_owned();
+        // Sizes chosen to avoid reallocation
+        let mut buf_raw = String::with_capacity(time_millis.len() * 18);
+        let mut buf_processed = String::with_capacity(time_millis.len() * 7);
+
+        extend_buf(&mut buf_raw, "time,pulse,movement\n");
+        extend_buf(&mut buf_processed, "time,pulse\n");
+
         for (((time_millis, pulse), movement), time_mins) in
             zip(zip(zip(time_millis, pulse), movement), time_mins)
         {
-            buf_raw.extend(format!("{time_millis},{pulse},{movement}\n").chars());
-            buf_processed.extend(format!("{time_mins},{pulse}\n").chars());
+            extend_buf(&mut buf_raw, &format!("{time_millis},{pulse},{movement}\n"));
+            extend_buf(&mut buf_processed, &format!("{time_mins},{pulse}\n"));
         }
 
         let _ = fs::write(file_name_raw, buf_raw);
@@ -79,7 +97,7 @@ fn main() -> ExitCode {
     );
 
     println!("Done");
-    #[cfg(feature = "benchmark")]
+    #[cfg(feature = "minimal_benchmark")]
     println!("Total time taken: {}ms", start.elapsed().as_millis());
 
     ExitCode::SUCCESS

@@ -495,7 +495,7 @@ impl ToTokens for Process {
             let process = |file: (#input_type)| -> Result<#signiature, (String, usize)> {
                 #function_body
             };
-            let parse = |file: &[Vec<String>]| -> Result<(#parse_return), (String, usize)> {
+            let parse = |file: &[Vec<&str>]| -> Result<(#parse_return), (String, usize)> {
                 #parse_function_declarations
                 for (i, line) in file.iter().enumerate() {
                     #parse_function_body
@@ -523,7 +523,7 @@ impl ToTokens for Program {
         let mut inner = TokenStream::new();
 
         inner.extend(quote! {
-            let csv = #csv;
+            let csv: &str = #csv;
 
             extern crate alloc;
             use ::core::prelude::rust_2021::*;
@@ -777,19 +777,12 @@ impl ToTokens for Program {
         let file_gen_benchmark = TokenStream::new();
 
         inner.extend(quote! {
-            let process = |file: &[Vec<String>]| -> Result<#signiature, (String, usize)> {
-                #process_function
-            };
-
-            let main = |csv: String| -> Result<#main_signiature, (String, usize)> {
-                #start_of_main
-
-                let mut lines: Vec<String> = csv
+            fn get_files(csv: &str) -> Vec<Vec<Vec<&str>>> {
+                let mut lines: Vec<&str> = csv
                     .split('\n')
                     .map(|s| {
                         s.strip_suffix("\r")
                             .unwrap_or(s)
-                            .to_owned()
                     })
                     .collect();
                 if let Some(line) = lines.last() {
@@ -798,17 +791,27 @@ impl ToTokens for Program {
                     }
                 }
 
-                let files: Vec<Vec<Vec<String>>> = lines
-                    .split(|line| line == #header)
+                lines
+                    .split(|&line| line == #header)
                     .map(|file| {
                         file
                             .iter()
                             .map(|line| {
-                                line.split(',').map(|item| item.to_owned()).collect()
+                                line.split(',').collect()
                             })
                             .collect()
                     })
-                    .collect();
+                    .collect()
+            }
+
+            let process = |file: &[Vec<&str>]| -> Result<#signiature, (String, usize)> {
+                #process_function
+            };
+
+            let main = |csv: &str| -> Result<#main_signiature, (String, usize)> {
+                #start_of_main
+
+                let files = get_files(csv);
 
                 #file_gen_benchmark
 

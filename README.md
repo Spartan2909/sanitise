@@ -81,7 +81,7 @@ time,pulse,movement
 126,132,1
 ```
 
-The first argument to `sanitise!` must be either a string literal or a macro call that expands to a string literal. The second argument must be an expression that resolves to a string in CSV format. In the above example, `sanitise_config.yaml` must be next to `main.rs`, and `data.csv` must be in the working directory at runtime.
+The first argument to `sanitise!` must be either a string literal or a macro call that expands to a string literal. The second argument must be an expression that resolves to a `&str` in CSV format. In the above example, `sanitise_config.yaml` must be next to `main.rs`, and `data.csv` must be in the working directory at runtime.
 
 ## Configuration
 
