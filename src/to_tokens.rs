@@ -679,7 +679,7 @@ impl ToTokens for Program {
         let main_signiature = if self.on_title == OnTitle::Split {
             quote!(Vec<#signiature>)
         } else {
-            // Clippy incorrectly detects this as redundant, but it is used when constructing `process_master`
+            // Clippy incorrectly detects this as redundant, but it is used when constructing `process`
             #[allow(clippy::redundant_clone)]
             signiature.clone()
         };
@@ -745,7 +745,7 @@ impl ToTokens for Program {
 
         let mut end_of_main = if self.on_title == OnTitle::Split {
             quote! {
-                let result = files[1..].iter().map(|file| process_master(file)).collect();
+                let result = files[1..].iter().map(|file| process(file)).collect();
             }
         } else {
             quote! {
@@ -753,7 +753,7 @@ impl ToTokens for Program {
                     return Err(("Found extra set of headers".to_owned(), files[1].len() + 1))
                 }
 
-                let result = process_master(&files[1]);
+                let result = process(&files[1]);
             }
         };
 
@@ -775,7 +775,7 @@ impl ToTokens for Program {
         let file_gen_benchmark = TokenStream::new();
 
         inner.extend(quote! {
-            let process_master = |file: &[Vec<String>]| -> Result<#signiature, (String, usize)> {
+            let process = |file: &[Vec<String>]| -> Result<#signiature, (String, usize)> {
                 #process_function
             };
 
