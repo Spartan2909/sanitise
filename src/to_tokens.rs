@@ -523,6 +523,8 @@ impl ToTokens for Program {
         let mut inner = TokenStream::new();
 
         inner.extend(quote! {
+            let csv = #csv;
+
             extern crate alloc;
             use ::core::prelude::rust_2021::*;
             use alloc::{boxed::Box, vec, vec::Vec};
@@ -812,7 +814,7 @@ impl ToTokens for Program {
 
                 #end_of_main
             };
-            main(#csv)
+            main(csv)
         });
 
         tokens.extend(quote! { { #inner } });
