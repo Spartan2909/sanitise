@@ -32,7 +32,7 @@ use sanitise::sanitise;
 
 fn main() {
     let csv = fs::read_to_string("data.csv").unwrap();
-    let ((time_millis, pulse, movement), (time_secs,)) = sanitise!(include_str!("sanitise_config.yaml"), csv).unwrap();
+    let ((time_millis, pulse, movement), (time_secs,)) = sanitise!(include_str!("sanitise_config.yaml"), &csv).unwrap();
 
     println!("time_millis,time_secs,pulse,movement");
     for (((time_millis, pulse), movement), time_secs) in zip(zip(zip(time_millis, pulse), movement), time_secs) {

@@ -509,7 +509,7 @@ impl Parse for MacroInput {
 /// # use std::{fs, iter::zip};
 /// # use sanitise::sanitise;
 ///
-/// let csv = "time,pulse,movement\n0,67,0\n15,45,1\n126,132,1\n".to_string();
+/// let csv = "time,pulse,movement\n0,67,0\n15,45,1\n126,132,1\n";
 /// let ((time_millis, pulse, movement),) = sanitise!(
 ///     r#"
 ///         processes:
