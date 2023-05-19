@@ -19,7 +19,7 @@ fn extend_buf(buf: &mut String, string: &str) {
         buf.reserve(1024);
     }
 
-    buf.extend(string.chars());
+    buf.push_str(string);
 }
 
 fn main() -> ExitCode {
@@ -43,6 +43,7 @@ fn main() -> ExitCode {
     // but rust-analyzer can't detect the type,
     // so this allows it to insert inline type hints later
     let result: Vec<((Vec<i64>, Vec<i64>, Vec<bool>), (Vec<i64>,))> =
+    #[allow(clippy::type_complexity)]
         match sanitise!(include_str!("sanity.yaml"), &file_contents) {
             Ok(v) => v,
             Err((message, line)) => {
