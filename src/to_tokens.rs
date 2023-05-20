@@ -477,9 +477,9 @@ impl ToTokens for Process {
                 .column_names()
                 .iter()
                 .position(|x| x == aggregate)
-                .expect(&format!(
-                    "internal error: invalid aggregate target - '{aggregate}'"
-                ));
+                .unwrap_or_else(|| {
+                    panic!("internal error: invalid aggregate target - '{aggregate}'")
+                });
             let aggregate_automaton_name = Ident::new(
                 &format!("automaton_{aggregate_automaton_index}"),
                 Span::call_site(),
@@ -491,7 +491,12 @@ impl ToTokens for Process {
                 get_returns.extend(quote!(let mut #new_result_name = vec![];));
                 let result_name = Ident::new(&format!("result_{index}"), Span::call_site());
                 let automaton_name = Ident::new(&format!("automaton_{index}"), Span::call_site());
-                new_result_names.push((new_result_name, automaton_name, result_name, *index == aggregate_automaton_index));
+                new_result_names.push((
+                    new_result_name,
+                    automaton_name,
+                    result_name,
+                    *index == aggregate_automaton_index,
+                ));
             }
 
             let mut get_aggregates = TokenStream::new();

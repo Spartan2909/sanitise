@@ -459,13 +459,15 @@ fn parse_process(input: Yaml) -> Process {
         .map(parse_column)
         .collect();
 
-    let aggregate_column = input.remove(&Yaml::from_str("aggregate-column")).map(|yaml| {
-        Ident::new(
-            yaml.as_str()
-                .expect("values of 'aggregate' must be a string"),
-            Span::call_site(),
-        )
-    });
+    let aggregate_column = input
+        .remove(&Yaml::from_str("aggregate-column"))
+        .map(|yaml| {
+            Ident::new(
+                yaml.as_str()
+                    .expect("values of 'aggregate' must be a string"),
+                Span::call_site(),
+            )
+        });
 
     ensure_empty(&input, "process");
 
