@@ -10,9 +10,9 @@ Optional.
 
 Specifies what to do when a title row is found.
 
-The valid options are `once`, which returns an error if more than one header row is found, and `split`, which splits the file at each title row and processes the resulting sections as individual files.
+The valid options are `combine`, which ignores headers and processes the whole file as one, `once`, which returns an error if more than one header row is found, and `split`, which splits the file at each title row and processes the resulting sections as individual files.
 
-If `once` is selected, the macro will return a tuple containing the result of processing. If `split` is selected, a Vec of tuples will be returned, with one tuple per section of the file.
+If `combine` or `once` are selected, the macro will return a tuple containing the result of processing. If `split` is selected, a Vec of tuples will be returned, with one tuple per section of the file.
 
 If no value is specified, the default is `once`.
 

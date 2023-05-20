@@ -320,6 +320,7 @@ impl Process {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum OnTitle {
+    Combine,
     Once,
     Split,
 }
@@ -332,6 +333,7 @@ impl From<Yaml> for OnTitle {
         let on_title: &str = &value;
 
         match on_title {
+            "combine" => OnTitle::Combine,
             "once" => OnTitle::Once,
             "split" => OnTitle::Split,
             _ => panic!("invalid value for title: '{on_title}'"),

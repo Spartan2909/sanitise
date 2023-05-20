@@ -526,7 +526,7 @@ impl ToTokens for Program {
 
             extern crate alloc;
             use ::core::prelude::rust_2021::*;
-            use alloc::{boxed::Box, vec, vec::Vec};
+            use alloc::{boxed::Box, collections::VecDeque, vec, vec::Vec};
 
             enum Interrupt {
                 Delete,
@@ -677,12 +677,9 @@ impl ToTokens for Program {
             signiature.extend(quote!(,));
         }
         let signiature = quote!((#signiature));
-        let main_signiature = if self.on_title == OnTitle::Split {
-            quote!(Vec<#signiature>)
-        } else {
-            // Clippy incorrectly detects this as redundant, but it is used when constructing `process`
-            #[allow(clippy::redundant_clone)]
-            signiature.clone()
+        let main_signiature = match self.on_title {
+            OnTitle::Combine | OnTitle::Once => signiature.clone(),
+            OnTitle::Split => quote!(Vec<#signiature>),
         };
         let header = self.processes[0].header(false);
 
@@ -744,28 +741,36 @@ impl ToTokens for Program {
         #[cfg(not(feature = "benchmark"))]
         let start_of_main = TokenStream::new();
 
-        let mut end_of_main = if self.on_title == OnTitle::Split {
-            quote! {
-                let result = files[1..].iter().map(|file| process(file)).collect();
-            }
-        } else {
-            quote! {
+        let process_files = match self.on_title {
+            OnTitle::Combine => quote! {
+                let mut files: VecDeque<_> = files.into();
+                files.pop_front(); // Discard the first empty vec
+                let mut file = files.pop_front().unwrap(); // Guaranteed to exist by check in main function
+                for file_section in files.iter_mut() {
+                    file.append(file_section);
+                }
+                let result = process(&file);
+            },
+            OnTitle::Once => quote! {
                 if files.len() > 2 {
                     return Err(("Found extra set of headers".to_owned(), files[1].len() + 1))
                 }
 
                 let result = process(&files[1]);
-            }
+            },
+            OnTitle::Split => quote! {
+                let result = files[1..].iter().map(|file| process(file)).collect();
+            },
         };
 
         #[cfg(feature = "benchmark")]
-        end_of_main.extend(quote! {
+        let main_return = quote! {
             println!("Main function finished: {}ms", start_time.elapsed().as_millis());
             result
-        });
+        };
 
         #[cfg(not(feature = "benchmark"))]
-        end_of_main.extend(quote!(result));
+        let main_return = quote!(result);
 
         #[cfg(feature = "benchmark")]
         let file_gen_benchmark = quote! {
@@ -812,10 +817,17 @@ impl ToTokens for Program {
 
                 let files = get_files(csv);
 
+                if files.len() < 2 {
+                    return Err(("found no headers".to_string(), 1));
+                }
+
                 #file_gen_benchmark
 
-                #end_of_main
+                #process_files
+
+                #main_return
             };
+
             main(csv)
         });
 
