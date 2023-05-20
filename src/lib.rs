@@ -1,11 +1,12 @@
-#![feature(proc_macro_expand)]
+#![feature(lint_reasons, proc_macro_expand)]
 #![doc = include_str!("../README.md")]
+#![deny(clippy::todo, clippy::unwrap_used)]
 
 mod output;
 use output::parse_output;
 mod to_tokens;
 
-use std::{collections::VecDeque, fmt, iter::zip};
+use std::{collections::VecDeque, iter::zip};
 
 extern crate proc_macro;
 
@@ -314,35 +315,18 @@ impl From<Yaml> for OnTitle {
     }
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-struct ProgramDebug<'a> {
-    processes: &'a Vec<Process>,
-    on_title: &'a OnTitle,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Program {
     processes: Vec<Process>,
     on_title: OnTitle,
     csv: Expr,
 }
 
-impl fmt::Debug for Program {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        ProgramDebug {
-            processes: &self.processes,
-            on_title: &self.on_title,
-        }
-        .fmt(f)
-    }
-}
-
 fn ensure_empty(hash: &Hash, map_name: &str) {
-    if !hash.is_empty() {
+    if let Some(key) = hash.keys().next() {
         panic!(
             "unexpected key '{}' in {}",
-            hash.keys().next().unwrap().as_str().unwrap(),
+            key.as_str().expect("all keys should be strings"),
             map_name,
         )
     }
@@ -595,7 +579,7 @@ pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let source = input.config.value();
     let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
         .pop_front()
-        .unwrap();
+        .expect("expect at least one document");
 
     let program = parse_program(yaml, input.csv);
 

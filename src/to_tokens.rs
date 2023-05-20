@@ -757,7 +757,7 @@ impl ToTokens for Program {
         }
         let signiature = quote!((#signiature));
         let main_signiature = match self.on_title {
-            #[allow(clippy::redundant_clone)] // `signiature` is used when constructing `process`
+            #[expect(clippy::redundant_clone, reason = "`signiature` is used when constructing `process`")]
             OnTitle::Combine | OnTitle::Once => signiature.clone(),
             OnTitle::Split => quote!(Vec<#signiature>),
         };
