@@ -237,7 +237,7 @@ impl Column {
 struct Process {
     name: String,
     columns: Vec<Column>,
-    aggregate: Option<Ident>,
+    aggregate_column: Option<Ident>,
 }
 
 impl Process {
@@ -459,7 +459,7 @@ fn parse_process(input: Yaml) -> Process {
         .map(parse_column)
         .collect();
 
-    let aggregate = input.remove(&Yaml::from_str("aggregate")).map(|yaml| {
+    let aggregate_column = input.remove(&Yaml::from_str("aggregate-column")).map(|yaml| {
         Ident::new(
             yaml.as_str()
                 .expect("values of 'aggregate' must be a string"),
@@ -472,7 +472,7 @@ fn parse_process(input: Yaml) -> Process {
     let mut process = Process {
         name,
         columns,
-        aggregate,
+        aggregate_column,
     };
 
     let names = process.column_names();
@@ -487,7 +487,7 @@ fn parse_process(input: Yaml) -> Process {
         }
     }
 
-    if let Some(aggregate) = &process.aggregate {
+    if let Some(aggregate) = &process.aggregate_column {
         if !names.contains(aggregate) {
             panic!("aggregate value '{aggregate}' is not a column");
         }

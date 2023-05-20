@@ -24,7 +24,7 @@ processes:
         output: "value == 1"
         on-null: delete
   - name: process
-    aggregate: time
+    aggregate-column: time
     columns:
       - title: time
         column-type: integer

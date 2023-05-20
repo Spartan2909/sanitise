@@ -470,7 +470,7 @@ impl ToTokens for Process {
             }
         }
 
-        if let Some(aggregate) = &self.aggregate {
+        if let Some(aggregate) = &self.aggregate_column {
             get_returns = TokenStream::new();
 
             let aggregate_automaton_index = self
