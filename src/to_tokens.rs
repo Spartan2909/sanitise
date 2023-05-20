@@ -464,8 +464,6 @@ impl ToTokens for Process {
             }
         }
 
-        function_body.extend(quote!(Ok((#return_value))));
-
         let mut parse_function_declarations = TokenStream::new();
         let num_columns = automata_names.len();
         let mut parse_function_body = quote! {
@@ -494,6 +492,7 @@ impl ToTokens for Process {
         inner.extend(quote! {
             let process = |file: (#input_type)| -> Result<#signiature, (String, usize)> {
                 #function_body
+                Ok((#return_value))
             };
             let parse = |file: &[Vec<&str>]| -> Result<(#parse_return), (String, usize)> {
                 #parse_function_declarations

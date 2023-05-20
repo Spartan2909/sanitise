@@ -5,7 +5,11 @@ mod output;
 use output::parse_output;
 mod to_tokens;
 
-use std::{collections::VecDeque, fmt, iter::zip};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt,
+    iter::zip,
+};
 
 extern crate proc_macro;
 
@@ -191,6 +195,38 @@ enum Output {
     },
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Aggregate {
+    Average,
+    First,
+}
+
+impl From<&str> for Aggregate {
+    fn from(value: &str) -> Self {
+        match value {
+            "average" => Aggregate::Average,
+            "first" => Aggregate::First,
+            _ => panic!("invalid value for 'aggregate': '{value}'"),
+        }
+    }
+}
+
+fn get_aggregate(hash: &mut Hash) -> Option<(Aggregate, String)> {
+    let aggregate = hash
+        .remove(&Yaml::from_str("aggregate"))?
+        .as_str()
+        .expect("value of 'aggregate' must be a string")
+        .into();
+
+    let aggregate_column = hash
+        .remove(&Yaml::from_str("aggregate-column"))
+        .expect("key 'aggregate-column' must be set when key 'aggregate' is set")
+        .into_string()
+        .expect("value of 'aggregate-column' must be a string");
+
+    Some((aggregate, aggregate_column))
+}
+
 #[derive(Debug, Clone)]
 struct Column {
     title: String,
@@ -204,6 +240,7 @@ struct Column {
     min: Option<Value>,
     output: Output,
     ignore: bool,
+    aggregate: Option<(Aggregate, String)>,
     process_columns: Vec<(Ident, ColumnType)>,
 }
 
@@ -218,6 +255,7 @@ impl Column {
 struct Process {
     name: String,
     columns: Vec<Column>,
+    aggregates: HashMap<String, Vec<(String, Aggregate)>>,
 }
 
 impl Process {
@@ -268,6 +306,15 @@ impl Process {
 
     fn ignores(&self) -> Vec<bool> {
         self.columns.iter().map(|column| column.ignore).collect()
+    }
+
+    fn push_aggregate(&mut self, column: String, target: String, aggregate_type: Aggregate) {
+        if let Some(targets) = self.aggregates.get_mut(&target) {
+            targets.push((column, aggregate_type));
+        } else {
+            self.aggregates
+                .insert(target, vec![(column, aggregate_type)]);
+        }
     }
 }
 
@@ -391,6 +438,12 @@ fn parse_column(input: Yaml) -> Column {
         .map(|yaml| yaml.as_bool().expect("'ignore' must be a Boolean"))
         .unwrap_or(false);
 
+    let aggregate = get_aggregate(&mut input);
+
+    if aggregate.is_some() {
+        panic!("the 'aggregate' feature is unfinished");
+    }
+
     ensure_empty(&input, "column");
 
     Column {
@@ -405,6 +458,7 @@ fn parse_column(input: Yaml) -> Column {
         min,
         output,
         ignore,
+        aggregate,
         process_columns: vec![],
     }
 }
@@ -429,17 +483,41 @@ fn parse_process(input: Yaml) -> Process {
 
     ensure_empty(&input, "process");
 
-    let mut process = Process { name, columns };
+    let mut process = Process {
+        name,
+        columns,
+        aggregates: HashMap::new(),
+    };
 
     let names = process.column_names();
     let column_types = process.column_types();
-    for (i, (name, column_type)) in zip(names, column_types).enumerate() {
+    for (i, (name, column_type)) in zip(&names, column_types).enumerate() {
+        if let Some((aggregate, aggregate_target)) = &process.columns[i].aggregate {
+            if !names.contains(&Ident::new(aggregate_target, Span::call_site())) {
+                panic!("column '{aggregate_target}' does not exist");
+            }
+
+            process.push_aggregate(name.to_string(), aggregate_target.to_owned(), *aggregate);
+        }
+
         for (j, column) in process.columns.iter_mut().enumerate() {
             if i == j {
                 continue;
             }
 
             column.process_columns.push((name.clone(), column_type));
+        }
+    }
+
+    let mut targets = vec![];
+    for (target, aggregates) in &process.aggregates {
+        targets.push(target);
+        for (aggregate, _) in aggregates {
+            if targets.contains(&aggregate) {
+                panic!(
+                    "column '{aggregate}' is both the target of an aggregate and aggregated itself"
+                );
+            }
         }
     }
 
