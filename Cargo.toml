@@ -25,7 +25,7 @@ benchmark = []
 
 [workspace]
 members = ["sanity"]
-package.version = "0.2.1"
+package.version = "0.3.0"
 package.authors = ["<robson.caleb.299@gmailcom> Caleb Robson"]
 
 [profile.release]
