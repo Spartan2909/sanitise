@@ -40,6 +40,18 @@ The name used to identify each process. In the future, this will be included in 
 
 Must be a unique string.
 
+### Aggregate Column - `aggregate-column`
+
+Optional.
+
+The column to aggregate by.
+
+Runs of values in this column will be collapsed into one value, and the values of other columns will be computed from their value of `aggregate`.
+
+See also [`column.aggregate`](#aggregate---aggregate)
+
+Must be the name of a column in this process.
+
 ### Columns - `columns`
 
 Required.
@@ -169,6 +181,23 @@ The `value` identifier refers to the current value in this column. To refer to t
 Note that this operation is not applied on an invalid value or null entry.
 
 If no expression is specified, the default is the current value in this column.
+
+### Aggregate - `aggregate`
+
+Optional.
+
+What to do when aggregating.
+
+The valid options are:
+- `average`, which averages the values from this column during the run in [`process.aggregate-column`](#aggregate-column---aggregate-column).
+- `first`, which selects the value from this column at the start of the run in [`process.aggregate-column`](#aggregate-column---aggregate-column).
+- `last`, which selects the value from this column at the end of the run in [`process.aggregate-column`](#aggregate-column---aggregate-column).
+
+Aggregation is performed after all other operations.
+
+Note that if no value is specified in [`process.aggregate-column`](#aggregate-column---aggregate-column), this setting will have no effect. In the future, specifying a value in this column without specifying one for [`process.aggregate-column`](#aggregate-column---aggregate-column) may become an error.
+
+If no value is specified, the default is `first`.
 
 ### Ignore - `ignore`
 
