@@ -70,7 +70,7 @@ fn main() -> ExitCode {
         result.into_iter().enumerate()
     {
         #[cfg(feature = "benchmark")]
-        let before_file_write = Instant::now();
+        let before_file_generate = Instant::now();
 
         let file_name_base = args.output_file_name.to_owned() + &format!("_{}", i + 1);
         let file_name_raw = file_name_base.to_owned() + "_raw.csv";
@@ -90,6 +90,15 @@ fn main() -> ExitCode {
         for (time_mins, pulse) in zip(time_mins, pulse_average) {
             extend_buf(&mut buf_processed, &format!("{time_mins},{pulse}\n"));
         }
+
+        #[cfg(feature = "benchmark")]
+        println!(
+            "Processed data for file {}: {}ms",
+            i + 1,
+            before_file_generate.elapsed().as_millis()
+        );
+        #[cfg(feature = "benchmark")]
+        let before_file_write = Instant::now();
 
         let _ = fs::write(file_name_raw, buf_raw);
         let _ = fs::write(file_name_processed, buf_processed);
