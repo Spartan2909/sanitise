@@ -1,5 +1,6 @@
 use crate::{
-    BinOp, Column, ColumnType, Function, OnInvalid, OnTitle, Output, Process, Program, UnOp, Value,
+    Aggregate, BinOp, Column, ColumnType, Function, OnInvalid, OnTitle, Output, Process, Program,
+    UnOp, Value,
 };
 
 use proc_macro2::{Ident, Span, TokenStream};
@@ -272,6 +273,18 @@ impl ToTokens for Column {
             quote!(self.output.pop();)
         };
 
+        let aggregate_function = match self.aggregate {
+            Aggregate::Average => quote! {
+                let mut sum = self.output[end_index].clone();
+                for item in &self.output[start_index..end_index] {
+                    sum += item.clone();
+                }
+                sum / (end_index - start_index + 1) as #output_type
+            },
+            Aggregate::First => quote!(self.output[start_index].clone()),
+            Aggregate::Last => quote!(self.output[end_index].clone()),
+        };
+
         let finish_function = if let OnInvalid::Average(_) = self.on_invalid {
             quote! {
                 if let #state_name::Invalid { missing, valid_streak, last_action } = &mut self.state {
@@ -286,10 +299,10 @@ impl ToTokens for Column {
                     }
                 }
 
-                Ok(self.output)
+                Ok(())
             }
         } else {
-            quote!(Ok(self.output))
+            quote!(Ok(()))
         };
 
         let mut push_function_params = TokenStream::new();
@@ -328,7 +341,11 @@ impl ToTokens for Column {
                     #undo_function
                 }
 
-                fn finish(mut self) -> Result<Vec<#output_type>, Interrupt> {
+                fn aggregate(&self, start_index: usize, end_index: usize) -> #output_type {
+                    #aggregate_function
+                }
+
+                fn finish(&mut self) -> Result<(), Interrupt> {
                     #finish_function
                 }
             }
@@ -346,12 +363,12 @@ impl ToTokens for Process {
             }
         }
 
-        let mut function_body = quote! {
+        let mut automata_initialisation = quote! {
             if file.0.is_empty() {
                 return Err(("Empty file".to_string(), 1));
             }
         };
-        let mut automata_names = vec![];
+        let mut automata_details = vec![];
         for (i, (struct_name, ignore)) in self
             .column_names()
             .into_iter()
@@ -359,13 +376,14 @@ impl ToTokens for Process {
             .enumerate()
         {
             if ignore {
-                automata_names.push(None);
+                automata_details.push(None);
             } else {
                 let automaton_name = Ident::new(&format!("automaton_{i}"), Span::call_site());
                 let title = format!("Column_{struct_name}");
                 let struct_name = Ident::new(&title, Span::call_site());
-                function_body.extend(quote!(let mut #automaton_name = #struct_name::new();));
-                automata_names.push(Some((
+                automata_initialisation
+                    .extend(quote!(let mut #automaton_name = #struct_name::new();));
+                automata_details.push(Some((
                     automaton_name,
                     self.columns[i].null_surrogate.clone(),
                 )));
@@ -374,9 +392,13 @@ impl ToTokens for Process {
 
         let mut automata_feed = TokenStream::new();
         let mut undo = TokenStream::new();
-        for (i, details) in automata_names.iter().enumerate() {
+        let mut finish_automata = TokenStream::new();
+        let mut get_returns = TokenStream::new();
+        let mut return_value = TokenStream::new();
+        let mut result_indexes = vec![];
+        for (i, details) in automata_details.iter().enumerate() {
             let mut args = TokenStream::new();
-            for j in 0..automata_names.len() {
+            for j in 0..automata_details.len() {
                 if i == j {
                     continue;
                 }
@@ -385,8 +407,11 @@ impl ToTokens for Process {
                 args.extend(quote!(file.#j[i].as_ref(),));
             }
 
-            let i = Index::from(i);
             if let Some((automaton_name, null_surrogate)) = details {
+                result_indexes.push(i);
+
+                let index = Index::from(i);
+
                 let push = quote! {
                     if let Err(interrupt) = #automaton_name.push(&tmp, #args) {
                         match interrupt {
@@ -424,7 +449,7 @@ impl ToTokens for Process {
                 };
 
                 automata_feed.extend(quote! {
-                    if let Some(tmp) = (file.#i)[i] {
+                    if let Some(tmp) = (file.#index)[i] {
                         #push
                     }
                     else {
@@ -433,14 +458,67 @@ impl ToTokens for Process {
                 });
 
                 undo.extend(quote!(#automaton_name.undo();));
+
+                let result_name = Ident::new(&format!("result_{i}"), Span::call_site());
+                finish_automata.extend(quote! {
+                    if let Err(interrupt) = #automaton_name.finish() {
+                        return Err((interrupt.extract_error(), file.0.len()));
+                    };
+                });
+                get_returns.extend(quote!(let #result_name = #automaton_name.output;));
+                return_value.extend(quote!(#result_name,));
             }
         }
 
-        function_body.extend(quote! {
-            for i in 0..(file.0.len()) {
-                #automata_feed
+        if let Some(aggregate) = &self.aggregate {
+            get_returns = TokenStream::new();
+
+            let aggregate_automaton_index = self
+                .column_names()
+                .iter()
+                .position(|x| x == aggregate)
+                .expect(&format!(
+                    "internal error: invalid aggregate target - '{aggregate}'"
+                ));
+            let aggregate_automaton_name = Ident::new(
+                &format!("automaton_{aggregate_automaton_index}"),
+                Span::call_site(),
+            );
+
+            let mut new_result_names = vec![];
+            for index in &result_indexes {
+                let new_result_name = Ident::new(&format!("new_result_{index}"), Span::call_site());
+                get_returns.extend(quote!(let mut #new_result_name = vec![];));
+                let result_name = Ident::new(&format!("result_{index}"), Span::call_site());
+                let automaton_name = Ident::new(&format!("automaton_{index}"), Span::call_site());
+                new_result_names.push((new_result_name, automaton_name, result_name, *index == aggregate_automaton_index));
             }
-        });
+
+            let mut get_aggregates = TokenStream::new();
+            for (result_name, automaton_name, _, is_aggregate) in &new_result_names {
+                get_aggregates.extend(if *is_aggregate {
+                    quote!(#result_name.push(run_value.to_owned());)
+                } else {
+                    quote!(#result_name.push(#automaton_name.aggregate(start_index, i - 1));)
+                });
+            }
+
+            get_returns.extend(quote! {
+                let mut start_index = 0;
+                let mut run_value = &#aggregate_automaton_name.output[0];
+                for (i, current_value) in #aggregate_automaton_name.output.iter().enumerate() {
+                    if current_value != run_value {
+                        #get_aggregates
+                        start_index = i;
+                        run_value = current_value;
+                    }
+                }
+            });
+
+            for (new_result_name, _, result_name, _) in &new_result_names {
+                get_returns.extend(quote!(let #result_name = #new_result_name;));
+            }
+        }
 
         let mut input_type = TokenStream::new();
         let mut parse_return = TokenStream::new();
@@ -450,22 +528,8 @@ impl ToTokens for Process {
             parse_return.extend(quote!(Vec<Option<#column_type>>,));
         }
 
-        let mut return_value = TokenStream::new();
-        for (i, details) in automata_names.iter().enumerate() {
-            if let Some((automaton_name, _)) = details {
-                let result_name = Ident::new(&format!("result_{i}"), Span::call_site());
-                function_body.extend(quote! {
-                    let #result_name = match #automaton_name.finish() {
-                        Ok(v) => v,
-                        Err(interrupt) => Err((interrupt.extract_error(), file.0.len()))?,
-                    };
-                });
-                return_value.extend(quote!(#result_name,));
-            }
-        }
-
         let mut parse_function_declarations = TokenStream::new();
-        let num_columns = automata_names.len();
+        let num_columns = automata_details.len();
         let mut parse_function_body = quote! {
             if line.len() != #num_columns {
                 return Err((format!("Invalid line length: {}", line.len()), i))
@@ -491,14 +555,24 @@ impl ToTokens for Process {
         let signiature = self.signiature();
         inner.extend(quote! {
             let process = |file: (#input_type)| -> Result<#signiature, (String, usize)> {
-                #function_body
+                #automata_initialisation
+
+                for i in 0..(file.0.len()) {
+                    #automata_feed
+                }
+
+                #finish_automata
+                #get_returns
+
                 Ok((#return_value))
             };
             let parse = |file: &[Vec<&str>]| -> Result<(#parse_return), (String, usize)> {
                 #parse_function_declarations
+
                 for (i, line) in file.iter().enumerate() {
                     #parse_function_body
                 }
+
                 Ok((#parse_function_return))
             };
             (process, parse)

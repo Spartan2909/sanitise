@@ -5,11 +5,7 @@ mod output;
 use output::parse_output;
 mod to_tokens;
 
-use std::{
-    collections::{HashMap, VecDeque},
-    fmt,
-    iter::zip,
-};
+use std::{collections::VecDeque, fmt, iter::zip};
 
 extern crate proc_macro;
 
@@ -199,6 +195,7 @@ enum Output {
 enum Aggregate {
     Average,
     First,
+    Last,
 }
 
 impl From<&str> for Aggregate {
@@ -206,25 +203,10 @@ impl From<&str> for Aggregate {
         match value {
             "average" => Aggregate::Average,
             "first" => Aggregate::First,
+            "last" => Aggregate::Last,
             _ => panic!("invalid value for 'aggregate': '{value}'"),
         }
     }
-}
-
-fn get_aggregate(hash: &mut Hash) -> Option<(Aggregate, String)> {
-    let aggregate = hash
-        .remove(&Yaml::from_str("aggregate"))?
-        .as_str()
-        .expect("value of 'aggregate' must be a string")
-        .into();
-
-    let aggregate_column = hash
-        .remove(&Yaml::from_str("aggregate-column"))
-        .expect("key 'aggregate-column' must be set when key 'aggregate' is set")
-        .into_string()
-        .expect("value of 'aggregate-column' must be a string");
-
-    Some((aggregate, aggregate_column))
 }
 
 #[derive(Debug, Clone)]
@@ -240,7 +222,7 @@ struct Column {
     min: Option<Value>,
     output: Output,
     ignore: bool,
-    aggregate: Option<(Aggregate, String)>,
+    aggregate: Aggregate,
     process_columns: Vec<(Ident, ColumnType)>,
 }
 
@@ -255,7 +237,7 @@ impl Column {
 struct Process {
     name: String,
     columns: Vec<Column>,
-    aggregates: HashMap<String, Vec<(String, Aggregate)>>,
+    aggregate: Option<Ident>,
 }
 
 impl Process {
@@ -306,15 +288,6 @@ impl Process {
 
     fn ignores(&self) -> Vec<bool> {
         self.columns.iter().map(|column| column.ignore).collect()
-    }
-
-    fn push_aggregate(&mut self, column: String, target: String, aggregate_type: Aggregate) {
-        if let Some(targets) = self.aggregates.get_mut(&target) {
-            targets.push((column, aggregate_type));
-        } else {
-            self.aggregates
-                .insert(target, vec![(column, aggregate_type)]);
-        }
     }
 }
 
@@ -440,11 +413,14 @@ fn parse_column(input: Yaml) -> Column {
         .map(|yaml| yaml.as_bool().expect("'ignore' must be a Boolean"))
         .unwrap_or(false);
 
-    let aggregate = get_aggregate(&mut input);
-
-    if aggregate.is_some() {
-        panic!("the 'aggregate' feature is unfinished");
-    }
+    let aggregate = input
+        .remove(&Yaml::from_str("aggregate"))
+        .map(|yaml| {
+            yaml.as_str()
+                .expect("value of 'aggregate' must be a string")
+                .into()
+        })
+        .unwrap_or(Aggregate::First);
 
     ensure_empty(&input, "column");
 
@@ -483,25 +459,25 @@ fn parse_process(input: Yaml) -> Process {
         .map(parse_column)
         .collect();
 
+    let aggregate = input.remove(&Yaml::from_str("aggregate")).map(|yaml| {
+        Ident::new(
+            yaml.as_str()
+                .expect("values of 'aggregate' must be a string"),
+            Span::call_site(),
+        )
+    });
+
     ensure_empty(&input, "process");
 
     let mut process = Process {
         name,
         columns,
-        aggregates: HashMap::new(),
+        aggregate,
     };
 
     let names = process.column_names();
     let column_types = process.column_types();
     for (i, (name, column_type)) in zip(&names, column_types).enumerate() {
-        if let Some((aggregate, aggregate_target)) = &process.columns[i].aggregate {
-            if !names.contains(&Ident::new(aggregate_target, Span::call_site())) {
-                panic!("column '{aggregate_target}' does not exist");
-            }
-
-            process.push_aggregate(name.to_string(), aggregate_target.to_owned(), *aggregate);
-        }
-
         for (j, column) in process.columns.iter_mut().enumerate() {
             if i == j {
                 continue;
@@ -511,15 +487,9 @@ fn parse_process(input: Yaml) -> Process {
         }
     }
 
-    let mut targets = vec![];
-    for (target, aggregates) in &process.aggregates {
-        targets.push(target);
-        for (aggregate, _) in aggregates {
-            if targets.contains(&aggregate) {
-                panic!(
-                    "column '{aggregate}' is both the target of an aggregate and aggregated itself"
-                );
-            }
+    if let Some(aggregate) = &process.aggregate {
+        if !names.contains(aggregate) {
+            panic!("aggregate value '{aggregate}' is not a column");
         }
     }
 

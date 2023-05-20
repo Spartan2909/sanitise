@@ -24,13 +24,14 @@ processes:
         output: "value == 1"
         on-null: delete
   - name: process
+    aggregate: time
     columns:
       - title: time
         column-type: integer
         output: "value / 60000"
       - title: pulse
         column-type: integer
-        ignore: true
+        aggregate: average
       - title: movement
         column-type: boolean
         ignore: true

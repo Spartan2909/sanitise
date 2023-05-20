@@ -51,7 +51,7 @@ fn main() -> ExitCode {
     // but rust-analyzer can't detect the type,
     // so this allows it to insert inline type hints later
     #[allow(clippy::type_complexity)]
-    let result: Vec<((Vec<i64>, Vec<i64>, Vec<bool>), (Vec<i64>,))> =
+    let result: Vec<((Vec<i64>, Vec<i64>, Vec<bool>), (Vec<i64>, Vec<i64>))> =
         match sanitise!(include_str!("sanity.yaml"), &file_contents) {
             Ok(v) => v,
             Err((message, line)) => {
@@ -66,7 +66,9 @@ fn main() -> ExitCode {
     let before_file_writes = Instant::now();
 
     println!("Writing to output files...");
-    for (i, ((time_millis, pulse, movement), (time_mins,))) in result.into_iter().enumerate() {
+    for (i, ((time_millis, pulse_raw, movement), (time_mins, pulse_average))) in
+        result.into_iter().enumerate()
+    {
         #[cfg(feature = "benchmark")]
         let before_file_write = Instant::now();
 
@@ -81,10 +83,11 @@ fn main() -> ExitCode {
         extend_buf(&mut buf_raw, "time,pulse,movement\n");
         extend_buf(&mut buf_processed, "time,pulse\n");
 
-        for (((time_millis, pulse), movement), time_mins) in
-            zip(zip(zip(time_millis, pulse), movement), time_mins)
-        {
+        for ((time_millis, pulse), movement) in zip(zip(time_millis, pulse_raw), movement) {
             extend_buf(&mut buf_raw, &format!("{time_millis},{pulse},{movement}\n"));
+        }
+
+        for (time_mins, pulse) in zip(time_mins, pulse_average) {
             extend_buf(&mut buf_processed, &format!("{time_mins},{pulse}\n"));
         }
 
