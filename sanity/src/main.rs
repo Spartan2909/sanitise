@@ -1,3 +1,5 @@
+#![deny(clippy::panic)]
+
 #[cfg(feature = "minimal_benchmark")]
 use std::time::Instant;
 use std::{fs, iter::zip, process::ExitCode};
@@ -30,7 +32,13 @@ fn main() -> ExitCode {
     let args = Args::parse();
 
     println!("Getting CSV contents...");
-    let file_contents = fs::read_to_string(args.file_name).unwrap();
+    let file_contents = match fs::read_to_string(args.file_name) {
+        Ok(contents) => contents,
+        Err(_) => {
+            eprintln!("Failed to read file");
+            return ExitCode::FAILURE;
+        }
+    };
 
     #[cfg(feature = "benchmark")]
     println!("Got CSV contents: {}ms", start.elapsed().as_millis());
