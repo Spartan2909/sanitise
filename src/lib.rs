@@ -45,25 +45,6 @@ impl From<String> for ColumnType {
     }
 }
 
-impl From<&ColumnType> for Ident {
-    fn from(value: &ColumnType) -> Self {
-        let string = match value {
-            ColumnType::Bool => "bool",
-            ColumnType::Float => "f64",
-            ColumnType::Integer => "i64",
-            ColumnType::String => "String",
-        };
-
-        Ident::new(string, Span::mixed_site())
-    }
-}
-
-impl From<ColumnType> for Ident {
-    fn from(value: ColumnType) -> Self {
-        (&value).into()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 enum Value {
     Boolean(bool),
@@ -249,7 +230,7 @@ impl Process {
                 continue;
             }
 
-            let output_type: Ident = column.output_type.into();
+            let output_type = column.output_type;
 
             tokens.extend(quote!(Vec<#output_type>,));
         }
@@ -348,6 +329,31 @@ fn parse_column(input: Yaml) -> Column {
         .expect("column type must be a string")
         .into();
 
+    let ignore = input
+        .remove(&Yaml::from_str("ignore"))
+        .map(|yaml| yaml.as_bool().expect("'ignore' must be a Boolean"))
+        .unwrap_or(false);
+
+    if ignore {
+        ensure_empty(&input, "column");
+
+        return Column {
+            title,
+            column_type,
+            output_type: column_type,
+            null_surrogate: None,
+            valid_values: None,
+            on_invalid: OnInvalid::Abort,
+            on_null: OnInvalid::Abort,
+            max: None,
+            min: None,
+            output: Output::Identifier(Ident::new("value", Span::call_site())),
+            ignore,
+            aggregate: Aggregate::First,
+            process_columns: vec![],
+        };
+    }
+
     let output_type = input
         .remove(&Yaml::from_str("output-type"))
         .map(|yaml| {
@@ -391,11 +397,6 @@ fn parse_column(input: Yaml) -> Column {
         .remove(&Yaml::from_str("output"))
         .map(|yaml| parse_output(yaml.into_string().expect("'output' must be a string")))
         .unwrap_or(Output::Identifier(Ident::new("value", Span::call_site())));
-
-    let ignore = input
-        .remove(&Yaml::from_str("ignore"))
-        .map(|yaml| yaml.as_bool().expect("'ignore' must be a Boolean"))
-        .unwrap_or(false);
 
     let aggregate = input
         .remove(&Yaml::from_str("aggregate"))

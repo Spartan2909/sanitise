@@ -92,7 +92,7 @@ The data type returned from this column. Likely to be the same as `column-type`,
 
 Must be one of `boolean`, `integer`, `real`, `string`.
 
-Defaults to the value of `column-type`.
+Defaults to the value of [`column-type`](#column-type---column-type).
 
 ### Null Surrogate - `null-surrogate`
 
@@ -100,7 +100,7 @@ Optional.
 
 A value to be treated as an empty entry if found.
 
-The data type of this value must be `column-type`.
+The data type of this value must be [`column-type`](#column-type---column-type).
 
 ### Valid Values - `valid-values`
 
@@ -150,7 +150,7 @@ The maximum value to accept.
 
 Any values found over this value will be considered invalid.
 
-The data type of this value must be `column-type`.
+The data type of this value must be [`column-type`](#column-type---column-type).
 
 ### Min - `min`
 
@@ -160,7 +160,7 @@ The minimum value to accept.
 
 Any values under this value will be considered invalid.
 
-The data type of this value must be `column-type`.
+The data type of this value must be [`column-type`](#column-type---column-type).
 
 ### Output - `output`
 
@@ -205,6 +205,6 @@ Optional.
 
 Whether to ignore this column and exclude it from the output of this process.
 
-If this is set to `true`, all other settings for the column will be disregarded.
+If this is set to `true`, the only other settings in this column must be [`title`](#title---title) and [`column-type`](#column-type---column-type).
 
 If no value is specified, the default is `false`.

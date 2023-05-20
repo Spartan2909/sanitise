@@ -24,8 +24,14 @@ impl<'a> ToTokens for ValueList<'a> {
 
 impl ToTokens for ColumnType {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let ident: Ident = self.into();
-        ident.to_tokens(tokens);
+        let inner = match self {
+            ColumnType::Bool => quote!(bool),
+            ColumnType::Float => quote!(f64),
+            ColumnType::Integer => quote!(i64),
+            ColumnType::String => quote!(String),
+        };
+
+        tokens.extend(inner);
     }
 }
 
@@ -111,9 +117,9 @@ impl ToTokens for Column {
         let name = Ident::new(&title, Span::call_site());
         let state_name = Ident::new(&(title + "_State"), Span::call_site());
 
-        let column_type: Ident = self.column_type.into();
+        let column_type = self.column_type;
 
-        let output_type: Ident = self.output_type.into();
+        let output_type = self.output_type;
 
         let (state, new_state) = if self.needs_state() {
             tokens.extend(quote! {
@@ -528,7 +534,7 @@ impl ToTokens for Process {
         let mut input_type = TokenStream::new();
         let mut parse_return = TokenStream::new();
         for column in &self.columns {
-            let column_type: Ident = column.column_type.into();
+            let column_type = column.column_type;
             input_type.extend(quote!(&[Option<#column_type>],));
             parse_return.extend(quote!(Vec<Option<#column_type>>,));
         }
@@ -757,7 +763,10 @@ impl ToTokens for Program {
         }
         let signiature = quote!((#signiature));
         let main_signiature = match self.on_title {
-            #[expect(clippy::redundant_clone, reason = "`signiature` is used when constructing `process`")]
+            #[expect(
+                clippy::redundant_clone,
+                reason = "`signiature` is used when constructing `process`"
+            )]
             OnTitle::Combine | OnTitle::Once => signiature.clone(),
             OnTitle::Split => quote!(Vec<#signiature>),
         };
