@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches: [ "main" ]
-    paths-ignore: [ "**.md" ]
+    paths: 
+      - "src/**"
+      - "sanity/**"
+      - "rust-toolchain"
+      - "Cargo.toml"
+      - ".github/workflows/**"
+      - "!**.md"
   pull_request:
     branches: [ "main" ]
 
