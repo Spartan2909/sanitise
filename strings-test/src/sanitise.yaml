@@ -1,0 +1,24 @@
+on-title: once
+processes:
+  - name: process
+    columns:
+      - title: name
+        column-type: string
+      - title: age
+        column-type: integer
+      - title: rating
+        column-type: string
+        output-type: integer
+        output: "integer(value)"
+  - name: validate
+    columns:
+      - title: name
+        column-type: string
+      - title: age
+        column-type: integer
+        max: 120
+        min: 16
+      - title: rating
+        column-type: integer
+        max: 10
+        min: 1
