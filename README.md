@@ -87,7 +87,7 @@ The first argument to `sanitise!` must be either a string literal or a macro cal
 
 For details on the configuration file, see the [specification](https://github.com/Spartan2909/sanitise/blob/main/configuration.md).
 
-## Features
+## Optional features
 
 - `benchmark`: Print the time taken to complete various stages of the process. Disables `no_std` support. You probably don't want this.
 
