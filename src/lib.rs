@@ -253,10 +253,26 @@ impl Function {
                 if output.return_type(var_types)? == ColumnType::Float {
                     Ok(ColumnType::Float)
                 } else {
-                    Err(format!("argument to 'ceiling' must be a real"))
+                    Err(format!("argument to '{self}' must be a real"))
                 }
             }
         }
+    }
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            Function::Boolean(_) => "boolean",
+            Function::Ceiling(_) => "ceiling",
+            Function::Floor(_) => "floor",
+            Function::Integer(_) => "integer",
+            Function::Real(_) => "real",
+            Function::Round(_) => "round",
+            Function::String(_) => "string",
+        };
+
+        write!(f, "{string}")
     }
 }
 
