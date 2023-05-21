@@ -63,6 +63,12 @@ impl From<&Value> for ColumnType {
     }
 }
 
+impl From<Value> for ColumnType {
+    fn from(value: Value) -> Self {
+        (&value).into()
+    }
+}
+
 impl From<String> for ColumnType {
     fn from(value: String) -> Self {
         ColumnType::from(value.as_str())
@@ -542,7 +548,13 @@ fn parse_column(input: Yaml) -> Column {
         yaml.into_vec()
             .expect("'valid-values' must be an array")
             .into_iter()
-            .map(|yaml| yaml.into())
+            .map(|yaml| {
+                let value: Value = yaml.into();
+                if ColumnType::from(&value) != column_type {
+                    panic!("the type of the values in 'valid-values' must be the same as 'columm-type'")
+                }
+                value
+            })
             .collect()
     });
 
@@ -560,9 +572,21 @@ fn parse_column(input: Yaml) -> Column {
         panic!("'on-null' can only be 'average' if 'on-invalid' is also 'average'")
     }
 
-    let max = input.remove(&Yaml::from_str("max")).map(|yaml| yaml.into());
+    let max = input.remove(&Yaml::from_str("max")).map(|yaml| {
+        let value: Value = yaml.into();
+        if ColumnType::from(&value) != column_type {
+            panic!("the type of 'max' must be the same as 'columm-type'")
+        }
+        value
+    });
 
-    let min = input.remove(&Yaml::from_str("min")).map(|yaml| yaml.into());
+    let min = input.remove(&Yaml::from_str("min")).map(|yaml| {
+        let value: Value = yaml.into();
+        if ColumnType::from(&value) != column_type {
+            panic!("the type of 'min' must be the same as 'columm-type'")
+        }
+        value
+    });
 
     let output = input
         .remove(&Yaml::from_str("output"))
@@ -588,12 +612,13 @@ fn parse_column(input: Yaml) -> Column {
         title,
         column_type,
         output_type,
-        null_surrogate,
+        null_surrogates,
         valid_values,
         on_invalid,
         on_null,
         max,
         min,
+        invalid_values,
         output,
         ignore,
         aggregate,
