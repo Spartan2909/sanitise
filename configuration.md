@@ -108,7 +108,7 @@ Optional.
 
 A set of values to accept. All other values will be considered invalid.
 
-Must be a list of `column-type`
+Must be an array of [`column-type`](#column-type---column-type).
 
 ### On Invalid - `on-invalid`
 
@@ -161,6 +161,14 @@ The minimum value to accept.
 Any values under this value will be considered invalid.
 
 The data type of this value must be [`column-type`](#column-type---column-type).
+
+### Invalid Values - `invalid-values`
+
+Optional.
+
+A set of values to reject.
+
+Must be an array of [`column-type`](#column-type---column-type).
 
 ### Output - `output`
 

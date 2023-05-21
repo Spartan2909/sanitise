@@ -373,12 +373,13 @@ struct Column {
     title: String,
     column_type: ColumnType,
     output_type: ColumnType,
-    null_surrogate: Option<Value>,
+    null_surrogates: Option<Vec<Value>>,
     valid_values: Option<Vec<Value>>,
     on_invalid: OnInvalid,
     on_null: OnInvalid,
     max: Option<Value>,
     min: Option<Value>,
+    invalid_values: Option<Vec<Value>>,
     output: Output,
     ignore: bool,
     aggregate: Aggregate,
@@ -518,12 +519,13 @@ fn parse_column(input: Yaml) -> Column {
             title,
             column_type,
             output_type: column_type,
-            null_surrogate: None,
+            null_surrogates: None,
             valid_values: None,
             on_invalid: OnInvalid::Abort,
             on_null: OnInvalid::Abort,
             max: None,
             min: None,
+            invalid_values: None,
             output: Output::Identifier(Ident::new("value", Span::call_site())),
             ignore,
             aggregate: Aggregate::First,
@@ -540,9 +542,19 @@ fn parse_column(input: Yaml) -> Column {
         })
         .unwrap_or(column_type);
 
-    let null_surrogate = input
-        .remove(&Yaml::from_str("null-surrogate"))
-        .map(|yaml| yaml.into());
+    let null_surrogates = input.remove(&Yaml::from_str("null-surrogates")).map(|yaml| {
+            yaml.into_vec()
+                .expect("'null-surrogate' must be an array")
+                .into_iter()
+                .map(|yaml| {
+                    let value: Value = yaml.into();
+                    if ColumnType::from(&value) != column_type {
+                        panic!("the type of the values in 'null-surrogate' must be the same as 'columm-type'")
+                    }
+                    value
+                })
+                .collect()
+        });
 
     let valid_values = input.remove(&Yaml::from_str("valid-values")).map(|yaml| {
         yaml.into_vec()
@@ -586,6 +598,20 @@ fn parse_column(input: Yaml) -> Column {
             panic!("the type of 'min' must be the same as 'columm-type'")
         }
         value
+    });
+
+    let invalid_values = input.remove(&Yaml::from_str("invalid-values")).map(|yaml| {
+        yaml.into_vec()
+            .expect("'invalid-values' must be an array")
+            .into_iter()
+            .map(|yaml| {
+                let value: Value = yaml.into();
+                if ColumnType::from(&value) != column_type {
+                    panic!("the type of the values in 'invalid-values' must be the same as 'columm-type'")
+                }
+                value
+            })
+            .collect()
     });
 
     let output = input

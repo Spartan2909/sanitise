@@ -12,11 +12,8 @@ struct ValueList<'a>(&'a Vec<Value>);
 impl<'a> ToTokens for ValueList<'a> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let mut inner = TokenStream::new();
-        for (i, value) in self.0.iter().enumerate() {
-            value.to_tokens(&mut inner);
-            if i + 1 < self.0.len() {
-                inner.extend(quote!(,));
-            }
+        for value in self.0 {
+            inner.extend(quote!(#value.to_owned(),));
         }
         tokens.extend(quote!([ #inner ]));
     }
@@ -212,6 +209,15 @@ impl ToTokens for Column {
             });
         }
 
+        if let Some(invalid_values) = &self.invalid_values {
+            let invalid_values = ValueList(invalid_values);
+            push_function.extend(quote! {
+                if #invalid_values.contains(value) {
+                    return self.invalid(value);
+                }
+            });
+        }
+
         if let Some(valid_values) = &self.valid_values {
             let valid_values = ValueList(valid_values);
             push_function.extend(quote! {
@@ -391,7 +397,7 @@ impl ToTokens for Process {
                     .extend(quote!(let mut #automaton_name = #struct_name::new();));
                 automata_details.push(Some((
                     automaton_name,
-                    self.columns[i].null_surrogate.clone(),
+                    self.columns[i].null_surrogates.clone(),
                 )));
             }
         }
@@ -442,9 +448,10 @@ impl ToTokens for Process {
                     }
                 };
 
-                let push = if let Some(surrogate) = null_surrogate {
+                let push = if let Some(surrogates) = null_surrogate {
+                    let surrogates = ValueList(surrogates);
                     quote! {
-                        if tmp == #surrogate.to_owned() {
+                        if #surrogates.contains(&tmp) {
                             #on_null
                         } else {
                             #push

@@ -4,12 +4,12 @@ processes:
     columns:
       - title: time
         column-type: integer
-        null-surrogate: -1
+        null-surrogates: [-1]
         on-null: previous
         null-sentinel: 0
       - title: pulse
         column-type: integer
-        null-surrogate: -1
+        null-surrogates: [-1]
         max: 100
         min: 40
         on-invalid: average
@@ -18,7 +18,7 @@ processes:
         null-sentinel: 0
       - title: movement
         column-type: integer
-        null-surrogate: -1
+        null-surrogates: [-1]
         valid-values: [0, 1]
         output-type: boolean
         output: "value == 1"
