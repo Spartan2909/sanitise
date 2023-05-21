@@ -6,7 +6,11 @@ mod output;
 use output::parse_output;
 mod to_tokens;
 
-use std::{collections::VecDeque, iter::zip};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt,
+    iter::zip,
+};
 
 extern crate proc_macro;
 
@@ -15,16 +19,25 @@ use quote::{quote, ToTokens};
 use syn::{
     parse,
     parse::{Parse, ParseStream},
-    parse_macro_input, Expr, LitStr, Result, Token,
+    parse_macro_input, Expr, LitStr, Token,
 };
 use yaml_rust::{yaml::Hash, Yaml, YamlLoader};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ColumnType {
     Bool,
     Float,
     Integer,
     String,
+}
+
+impl ColumnType {
+    fn is_numeric(&self) -> bool {
+        match self {
+            ColumnType::Float | ColumnType::Integer => true,
+            ColumnType::Bool | ColumnType::String => false,
+        }
+    }
 }
 
 impl From<&str> for ColumnType {
@@ -39,9 +52,31 @@ impl From<&str> for ColumnType {
     }
 }
 
+impl From<&Value> for ColumnType {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Boolean(_) => ColumnType::Bool,
+            Value::Integer(_) => ColumnType::Integer,
+            Value::Real(_) => ColumnType::Float,
+            Value::String(_) => ColumnType::String,
+        }
+    }
+}
+
 impl From<String> for ColumnType {
     fn from(value: String) -> Self {
         ColumnType::from(value.as_str())
+    }
+}
+
+impl fmt::Display for ColumnType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ColumnType::Bool => write!(f, "boolean"),
+            ColumnType::Float => write!(f, "real"),
+            ColumnType::Integer => write!(f, "integer"),
+            ColumnType::String => write!(f, "string"),
+        }
     }
 }
 
@@ -125,7 +160,7 @@ fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BinOp {
     Add,
     Sub,
@@ -140,10 +175,57 @@ enum BinOp {
     Ge,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl fmt::Display for BinOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            BinOp::Add => "+",
+            BinOp::Sub => "-",
+            BinOp::Mul => "*",
+            BinOp::Div => "/",
+            BinOp::Mod => "%",
+            BinOp::Eq => "==",
+            BinOp::Ne => "!=",
+            BinOp::Lt => "<",
+            BinOp::Le => "<=",
+            BinOp::Gt => ">",
+            BinOp::Ge => ">=",
+        };
+
+        write!(f, "{string}")
+    }
+}
+
+impl BinOp {
+    fn is_comparison(&self) -> bool {
+        matches!(
+            self,
+            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+        )
+    }
+
+    fn is_numeric(&self) -> bool {
+        matches!(
+            self,
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UnOp {
     Negate,
     Not,
+}
+
+impl fmt::Display for UnOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            UnOp::Negate => "-",
+            UnOp::Not => "!",
+        };
+
+        write!(f, "{string}")
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +237,27 @@ enum Function {
     Real(Box<Output>),
     Round(Box<Output>),
     String(Box<Output>),
+}
+
+impl Function {
+    /// Gets the type that this expression will evaluate to.
+    /// # Errors
+    /// Returns an error if a type error is encountered.
+    fn return_type(&self, var_types: &HashMap<Ident, ColumnType>) -> Result<ColumnType, String> {
+        match self {
+            Function::Boolean(_) => Ok(ColumnType::Bool),
+            Function::Integer(_) => Ok(ColumnType::Integer),
+            Function::Real(_) => Ok(ColumnType::Float),
+            Function::String(_) => Ok(ColumnType::String),
+            Function::Ceiling(output) | Function::Floor(output) | Function::Round(output) => {
+                if output.return_type(var_types)? == ColumnType::Float {
+                    Ok(ColumnType::Float)
+                } else {
+                    Err(format!("argument to 'ceiling' must be a real"))
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -173,7 +276,59 @@ enum Output {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Output {
+    /// Gets the type that this expression will evaluate to.
+    /// # Errors
+    /// Returns an error if a type error is encountered.
+    fn return_type(&self, var_types: &HashMap<Ident, ColumnType>) -> Result<ColumnType, String> {
+        match self {
+            Output::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                let left_type = left.return_type(var_types)?;
+                let right_type = right.return_type(var_types)?;
+
+                if left_type != right_type {
+                    Err(format!("cannot compare {left_type} with {right_type}"))?
+                } else if operator.is_numeric() && !left_type.is_numeric() {
+                    Err(format!("cannot use operator '{operator}' on {left_type}"))?
+                }
+
+                if operator.is_comparison() {
+                    Ok(ColumnType::Bool)
+                } else {
+                    Ok(left_type)
+                }
+            }
+            Output::Function(function) => function.return_type(var_types),
+            Output::Identifier(ident) => var_types
+                .get(ident)
+                .map(|column_type| Ok(*column_type))
+                .unwrap_or(Err(format!("identifier '{ident}' not found"))),
+            Output::Literal(value) => Ok(value.into()),
+            Output::Unary { operator, right } => match *operator {
+                UnOp::Negate => {
+                    let right_type = right.return_type(var_types)?;
+                    if !right_type.is_numeric() {
+                        panic!("cannot use operator '{operator}' on {right_type}");
+                    }
+                    Ok(right_type)
+                }
+                UnOp::Not => {
+                    let right_type = right.return_type(var_types)?;
+                    if right_type != ColumnType::Bool {
+                        panic!("cannot use operator '{operator}' on {right_type}");
+                    }
+                    Ok(ColumnType::Bool)
+                }
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Aggregate {
     Average,
     First,
@@ -407,6 +562,10 @@ fn parse_column(input: Yaml) -> Column {
         })
         .unwrap_or(Aggregate::First);
 
+    if aggregate == Aggregate::Average && !output_type.is_numeric() {
+        panic!("'{output_type}' cannot be averaged");
+    }
+
     ensure_empty(&input, "column");
 
     Column {
@@ -480,6 +639,39 @@ fn parse_process(input: Yaml) -> Process {
         }
     }
 
+    let mut var_types: HashMap<Ident, ColumnType> = process
+        .columns
+        .iter()
+        .map(|column| {
+            (
+                Ident::new(
+                    &format!("value_{}", column.title.to_owned()),
+                    Span::call_site(),
+                ),
+                column.output_type,
+            )
+        })
+        .collect();
+    let value_ident = Ident::new("value", Span::call_site());
+
+    for column in &process.columns {
+        var_types.insert(value_ident.clone(), column.column_type);
+        let return_type = match column.output.return_type(&var_types) {
+            Ok(return_type) => return_type,
+            Err(message) => panic!(
+                "process '{}', column '{}': {}",
+                process.name, column.title, message
+            ),
+        };
+        if return_type != column.output_type {
+            panic!(
+                "process '{}', column '{}': expected {}, found {}",
+                process.name, column.title, column.output_type, return_type
+            );
+        }
+        var_types.remove(&value_ident);
+    }
+
     process
 }
 
@@ -517,7 +709,7 @@ struct MacroInput {
 }
 
 impl Parse for MacroInput {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         let config: Expr = input.parse()?;
         let tokens: proc_macro::TokenStream = config.to_token_stream().into();
         let tokens = tokens.expand_expr().unwrap_or_else(|err| panic!("{err}"));
