@@ -479,6 +479,7 @@ struct Program {
     processes: Vec<Process>,
     on_title: OnTitle,
     csv: Expr,
+    string_input: bool,
 }
 
 fn ensure_empty(hash: &Hash, map_name: &str) {
@@ -742,7 +743,7 @@ fn parse_process(input: Yaml) -> Process {
     process
 }
 
-fn parse_program(input: Yaml, csv: Expr) -> Program {
+fn parse_program(input: Yaml, csv: Expr, string_input: bool) -> Program {
     let mut program = input.into_hash().expect("config must be a map");
 
     let processes = program
@@ -765,6 +766,7 @@ fn parse_program(input: Yaml, csv: Expr) -> Program {
         processes,
         on_title,
         csv,
+        string_input,
     }
 }
 
@@ -798,15 +800,70 @@ impl Parse for MacroInput {
 /// Cleans up and validates data.
 ///
 /// The first argument must be either a string literal or a macro call that expands to a string literal.
+/// The second argument must be an expression that resolves to a tuple of borrowed slices of options containing the values of the input file.
+/// The slices must all be the same length.
+/// This is more clearly explained by the examples.
+///
+/// # Examples
+/// ```
+/// # use std::iter::zip;
+/// # use sanitise::sanitise;
+///
+/// let time = vec![Some(0), Some(15), Some(127)];
+/// let pulse = vec![Some(67), Some(45), Some(132)];
+/// let movement = vec![Some(0), Some(1), Some(1)];
+/// let ((time_millis, pulse, movement),) = sanitise!(
+///     r#"
+///         processes:
+///           - name: validate
+///             columns:
+///               - title: time
+///                 column-type: integer
+///               - title: pulse
+///                 column-type: integer
+///                 max: 100
+///                 min: 40
+///                 on-invalid: average
+///                 valid-streak: 3
+///               - title: movement
+///                 column-type: integer
+///                 valid-values: [0, 1]
+///                 output-type: boolean
+///                 output: "value == 1"
+///     "#,
+///     (&time, &pulse, &movement),
+/// ).unwrap();
+///
+/// println!("time_millis,pulse,movement");
+/// for ((time_millis, pulse), movement) in zip(zip(time_millis, pulse), movement) {
+///     println!("{time_millis},{pulse},{movement}")
+/// }
+/// ```
+#[proc_macro]
+pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as MacroInput);
+    let source = input.config.value();
+    let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
+        .pop_front()
+        .expect("expect at least one document");
+
+    let program = parse_program(yaml, input.csv, false);
+
+    program.to_token_stream().into()
+}
+
+/// Cleans up and validates data from a string.
+///
+/// The first argument must be either a string literal or a macro call that expands to a string literal.
 /// The second argument must be an expression that resolves to a string in CSV format.
 ///
 /// # Examples
 /// ```
 /// # use std::{fs, iter::zip};
-/// # use sanitise::sanitise;
+/// # use sanitise::sanitise_string;
 ///
 /// let csv = "time,pulse,movement\n0,67,0\n15,45,1\n126,132,1\n";
-/// let ((time_millis, pulse, movement),) = sanitise!(
+/// let ((time_millis, pulse, movement),) = sanitise_string!(
 ///     r#"
 ///         processes:
 ///           - name: validate
@@ -834,14 +891,14 @@ impl Parse for MacroInput {
 /// }
 /// ```
 #[proc_macro]
-pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn sanitise_string(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as MacroInput);
     let source = input.config.value();
     let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
         .pop_front()
         .expect("expect at least one document");
 
-    let program = parse_program(yaml, input.csv);
+    let program = parse_program(yaml, input.csv, true);
 
     program.to_token_stream().into()
 }

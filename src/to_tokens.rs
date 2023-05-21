@@ -425,7 +425,7 @@ impl ToTokens for Process {
                 let index = Index::from(i);
 
                 let push = quote! {
-                    if let Err(interrupt) = #automaton_name.push(&tmp, #args) {
+                    if let Err(interrupt) = #automaton_name.push(tmp, #args) {
                         match interrupt {
                             Interrupt::Delete => {
                                 #undo
@@ -462,7 +462,7 @@ impl ToTokens for Process {
                 };
 
                 automata_feed.extend(quote! {
-                    if let Some(tmp) = (file.#index)[i] {
+                    if let Some(tmp) = &(file.#index)[i] {
                         #push
                     }
                     else {
@@ -572,7 +572,7 @@ impl ToTokens for Process {
 
         let signiature = self.signiature();
         inner.extend(quote! {
-            let process = |file: (#input_type)| -> Result<#signiature, (String, usize)> {
+            fn process (file: (#input_type)) -> Result<#signiature, (String, usize)> {
                 #automata_initialisation
 
                 for i in 0..(file.0.len()) {
@@ -584,7 +584,7 @@ impl ToTokens for Process {
 
                 Ok((#return_value))
             };
-            let parse = |file: &[Vec<&str>]| -> Result<(#parse_return), (String, usize)> {
+           fn parse(file: &[Vec<&str>]) -> Result<(#parse_return), (String, usize)> {
                 #parse_function_declarations
 
                 for (i, line) in file.iter().enumerate() {
@@ -613,8 +613,27 @@ impl ToTokens for Program {
         #[cfg(not(feature = "benchmark"))]
         let mut inner = TokenStream::new();
 
+        let process_function_input_type = if self.string_input {
+            quote!(&[Vec<&str>])
+        } else {
+            let mut file_type = TokenStream::new();
+
+            for column_type in self.processes[0].column_types() {
+                file_type.extend(quote!(&[Option<#column_type>],));
+            }
+
+            quote!((#file_type))
+        };
+
+        let main_function_input_type = if self.string_input {
+            quote!(&str)
+        } else {
+            #[allow(clippy::redundant_clone)]
+            process_function_input_type.clone()
+        };
+
         inner.extend(quote! {
-            let csv: &str = #csv;
+            let csv: #main_function_input_type = (#csv);
 
             extern crate alloc;
             use ::core::prelude::rust_2021::*;
@@ -795,9 +814,16 @@ impl ToTokens for Program {
         #[cfg(not(feature = "benchmark"))]
         let mut process_function = TokenStream::new();
 
-        process_function.extend(quote! {
-            let (#initial_assignment_target) = parse_file(file)?;
-        });
+        if self.string_input {
+            process_function.extend(quote! {
+                let (#initial_assignment_target) = parse_file(file)?;
+            });
+        } else {
+            process_function.extend(quote! {
+                let (#initial_assignment_target) = file;
+            });
+        }
+
         let mut process_function_return = TokenStream::new();
 
         let mut args = quote!((#args));
@@ -826,8 +852,6 @@ impl ToTokens for Program {
         process_function.extend(quote! {
             println!("Process function finished: {}ms", start_time.elapsed().as_millis());
         });
-
-        process_function.extend(quote!(Ok((#process_function_return))));
 
         #[cfg(feature = "benchmark")]
         let start_of_main = quote! {
@@ -860,6 +884,32 @@ impl ToTokens for Program {
         };
 
         #[cfg(feature = "benchmark")]
+        let file_gen_benchmark = quote! {
+            println!("Split input into files: {}ms", start_time.elapsed().as_millis());
+        };
+
+        #[cfg(not(feature = "benchmark"))]
+        let file_gen_benchmark = TokenStream::new();
+
+        let main_body = if self.string_input {
+            quote! {
+                let files = get_files(csv);
+
+                if files.len() < 2 {
+                    return Err(("found no headers".to_string(), 1));
+                }
+
+                #file_gen_benchmark
+
+                #process_files
+            }
+        } else {
+            quote! {
+                let result = process(csv);
+            }
+        };
+
+        #[cfg(feature = "benchmark")]
         let main_return = quote! {
             println!("Main function finished: {}ms", start_time.elapsed().as_millis());
             result
@@ -867,14 +917,6 @@ impl ToTokens for Program {
 
         #[cfg(not(feature = "benchmark"))]
         let main_return = quote!(result);
-
-        #[cfg(feature = "benchmark")]
-        let file_gen_benchmark = quote! {
-            println!("Split input into files: {}ms", start_time.elapsed().as_millis());
-        };
-
-        #[cfg(not(feature = "benchmark"))]
-        let file_gen_benchmark = TokenStream::new();
 
         inner.extend(quote! {
             fn get_files(csv: &str) -> Vec<Vec<Vec<&str>>> {
@@ -904,22 +946,16 @@ impl ToTokens for Program {
                     .collect()
             }
 
-            let process = |file: &[Vec<&str>]| -> Result<#signiature, (String, usize)> {
+            let process = |file: #process_function_input_type| -> Result<#signiature, (String, usize)> {
                 #process_function
+
+                Ok((#process_function_return))
             };
 
-            let main = |csv: &str| -> Result<#main_signiature, (String, usize)> {
+            let main = |csv: #main_function_input_type| -> Result<#main_signiature, (String, usize)> {
                 #start_of_main
 
-                let files = get_files(csv);
-
-                if files.len() < 2 {
-                    return Err(("found no headers".to_string(), 1));
-                }
-
-                #file_gen_benchmark
-
-                #process_files
+                #main_body
 
                 #main_return
             };

@@ -17,14 +17,14 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = { version = "2.0", features = ["extra-traits"] }
+syn = { version = "2.0", features = ["full", "extra-traits"] }
 yaml-rust = "0.4"
 
 [features]
 benchmark = []
 
 [workspace]
-members = ["sanity"]
+members = ["sanity", "strings-test"]
 package.version = "0.3.0"
 package.authors = ["<robson.caleb.299@gmailcom> Caleb Robson"]
 

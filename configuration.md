@@ -14,6 +14,8 @@ The valid options are `combine`, which ignores headers and processes the whole f
 
 If `combine` or `once` are selected, the macro will return a tuple containing the result of processing. If `split` is selected, a Vec of tuples will be returned, with one tuple per section of the file.
 
+Note that this option is ignored by the `sanitise` macro, and only used by the `sanitise_string` macro.
+
 If no value is specified, the default is `once`.
 
 ### Processes - `processes`

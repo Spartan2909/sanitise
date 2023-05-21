@@ -20,7 +20,7 @@ sanitise = "0.1"
 
 Import the macro:
 ```rust
-use sanitise::sanitise;
+use sanitise::sanitise_string;
 ```
 
 And call:
@@ -28,11 +28,11 @@ And call:
 // main.rs
 use std::{fs, iter::zip};
 
-use sanitise::sanitise;
+use sanitise::sanitise_string;
 
 fn main() {
     let csv = fs::read_to_string("data.csv").unwrap();
-    let ((time_millis, pulse, movement), (time_secs,)) = sanitise!(include_str!("sanitise_config.yaml"), &csv).unwrap();
+    let ((time_millis, pulse, movement), (time_secs,)) = sanitise_string!(include_str!("sanitise_config.yaml"), &csv).unwrap();
 
     println!("time_millis,time_secs,pulse,movement");
     for (((time_millis, pulse), movement), time_secs) in zip(zip(zip(time_millis, pulse), movement), time_secs) {
@@ -81,7 +81,9 @@ time,pulse,movement
 126,132,1
 ```
 
-The first argument to `sanitise!` must be either a string literal or a macro call that expands to a string literal. The second argument must be an expression that resolves to a `&str` in CSV format. In the above example, `sanitise_config.yaml` must be next to `main.rs`, and `data.csv` must be in the working directory at runtime.
+The first argument to `sanitise_string!` must be either a string literal or a macro call that expands to a string literal. The second argument must be an expression that resolves to a `&str` in CSV format. In the above example, `sanitise_config.yaml` must be next to `main.rs`, and `data.csv` must be in the working directory at runtime.
+
+The other macro, `sanitise!`, is used when your data has already been parsed into the correct shape. See the [documentation](https://docs.rs/sanitise/latest/sanitise/macro.sanitise.html) for more details.
 
 ## Configuration
 

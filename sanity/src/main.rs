@@ -5,7 +5,7 @@ use std::time::Instant;
 use std::{fs, iter::zip, process::ExitCode};
 
 use clap::Parser;
-use sanitise::sanitise;
+use sanitise::sanitise_string;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -52,7 +52,7 @@ fn main() -> ExitCode {
     // so this allows it to insert inline type hints later
     #[allow(clippy::type_complexity)]
     let result: Vec<((Vec<i64>, Vec<i64>, Vec<bool>), (Vec<i64>, Vec<i64>))> =
-        match sanitise!(include_str!("sanity.yaml"), &file_contents) {
+        match sanitise_string!(include_str!("sanity.yaml"), &file_contents) {
             Ok(v) => v,
             Err((message, line)) => {
                 eprintln!("Line {line}: {message}");
