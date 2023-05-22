@@ -184,7 +184,7 @@ The following functions are provided:
 - `boolean`: Convert the argument to a Boolean. Numbers will be `false` if they are equal to 0, and `true` otherwise. Strings will be `false` if they are empty, and `true` otherwise.
 - `integer`: Convert the argument to an integer. Booleans will be 1 if they are `true` and 0 if they are `false`. Floats will be rounded down to the highest representable integer lower than them. Strings will be parsed into an integer, and return an error if the parsing fails.
 - `real`: Convert the argument to a float. Booleans will be 1.0 if they are `true` and 0.0 if they are `false`. Strings will be parsed into an float, and return an error if the parsing fails. Note that very large integers may lose precison when converted to floats.
-- `string`: Convert the argument to a string. All values will simply be converted to a textual representation.
+- `string`: Convert the argument to a string. All values will simply be converted to a textual representation. Floats with no fractional part will be displayed as an integer.
 - `round`: Rounds the argument to the closest integer. The argument must be a float.
 - `ceiling`: Rounds the argument to the smallest integer higher than it. The argument must be a float.
 - `floor`: Rounds the argument to the largest integer smaller than it. The argument must be a float.
