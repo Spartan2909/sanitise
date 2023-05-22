@@ -14,6 +14,7 @@ mod kw {
 
     custom_keyword!(boolean);
     custom_keyword!(ceiling);
+    custom_keyword!(concat);
     custom_keyword!(floor);
     custom_keyword!(integer);
     custom_keyword!(real);
@@ -88,6 +89,15 @@ fn arg(input: ParseStream) -> Result<Output> {
     content.parse()
 }
 
+fn args(input: ParseStream) -> Result<(Output, Output)> {
+    let content;
+    parenthesized!(content in input);
+    let arg1 = content.parse()?;
+    content.parse::<Token![,]>()?;
+    let arg2 = content.parse()?;
+    Ok((arg1, arg2))
+}
+
 fn function(input: ParseStream) -> Result<Output> {
     if input.peek(kw::boolean) {
         input.parse::<kw::boolean>()?;
@@ -95,6 +105,10 @@ fn function(input: ParseStream) -> Result<Output> {
     } else if input.peek(kw::ceiling) {
         input.parse::<kw::ceiling>()?;
         Ok(Output::Function(Function::Ceiling(Box::new(arg(input)?))))
+    } else if input.peek(kw::concat) {
+        input.parse::<kw::concat>()?;
+        let (arg1, arg2) = args(input)?;
+        Ok(Output::Function(Function::Concat(Box::new(arg1), Box::new(arg2))))
     } else if input.peek(kw::floor) {
         input.parse::<kw::floor>()?;
         Ok(Output::Function(Function::Floor(Box::new(arg(input)?))))

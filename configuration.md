@@ -188,6 +188,7 @@ The following functions are provided:
 - `round`: Rounds the argument to the closest integer. The argument must be a float.
 - `ceiling`: Rounds the argument to the smallest integer higher than it. The argument must be a float.
 - `floor`: Rounds the argument to the largest integer smaller than it. The argument must be a float.
+- `concat`: Concatenates the two arguments. Both arguments must be strings.
 
 The `value` identifier refers to the current value in this column. To refer to the current value in another column, prefix that column's name with `value_`. For example, if you wanted to refer to the current value in the 'pulse' column, you would use the identifier `value_pulse`. Note that this refers to the raw (unprocessed) value in that column. Note that if the entry is null, this access will panic. This behaviour may change in the future.
 

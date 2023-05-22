@@ -238,6 +238,7 @@ impl fmt::Display for UnOp {
 enum Function {
     Boolean(Box<Output>),
     Ceiling(Box<Output>),
+    Concat(Box<Output>, Box<Output>),
     Floor(Box<Output>),
     Integer(Box<Output>),
     Real(Box<Output>),
@@ -262,6 +263,15 @@ impl Function {
                     Err(format!("argument to '{self}' must be a real"))
                 }
             }
+            Function::Concat(left, right) => {
+                let left_type = left.return_type(var_types)?;
+                let right_type = right.return_type(var_types)?;
+                if left_type != ColumnType::String || right_type != ColumnType::String {
+                    Err("arguments to 'concat' must be strings".to_string())
+                } else {
+                    Ok(ColumnType::String)
+                }
+            }
         }
     }
 }
@@ -271,6 +281,7 @@ impl fmt::Display for Function {
         let string = match self {
             Function::Boolean(_) => "boolean",
             Function::Ceiling(_) => "ceiling",
+            Function::Concat(_, _) => "concat",
             Function::Floor(_) => "floor",
             Function::Integer(_) => "integer",
             Function::Real(_) => "real",

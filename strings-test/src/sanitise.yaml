@@ -4,6 +4,7 @@ processes:
     columns:
       - title: name
         column-type: string
+        output: "concat(\"name_\", value)"
       - title: age
         column-type: integer
       - title: rating

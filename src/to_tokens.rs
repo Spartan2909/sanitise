@@ -48,6 +48,9 @@ impl ToTokens for Function {
         let inner = match self {
             Function::Boolean(arg) => quote! { SanitiseConversions::to_bool(&((#arg)?)) },
             Function::Ceiling(arg) => quote! { Ok(sanitise_ceiling(&((#arg)?))) },
+            Function::Concat(arg1, arg2) => quote! {
+                Ok(sanitise_concat(&((#arg1)?), &((#arg2)?)))
+            },
             Function::Floor(arg) => quote! { Ok(sanitise_floor(&((#arg)?))) },
             Function::Integer(arg) => quote! { SanitiseConversions::to_int(&((#arg)?)) },
             Function::Real(arg) => quote! { SanitiseConversions::to_float(&((#arg)?)) },
@@ -767,6 +770,10 @@ impl ToTokens for Program {
 
             fn sanitise_round(value: &f64) -> f64 {
                 (*value).round()
+            }
+
+            fn sanitise_concat(value1: &str, value2: &str) -> String {
+                value1.to_owned() + value2
             }
         });
 
