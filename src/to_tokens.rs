@@ -332,6 +332,7 @@ impl ToTokens for Column {
             }
 
             impl #name {
+                #[inline(always)]
                 fn new() -> #name {
                     #name { output: vec![], #new_state }
                 }
@@ -344,10 +345,12 @@ impl ToTokens for Column {
                     #null_function
                 }
 
+                #[inline(always)]
                 fn push_valid(&mut self, value: #output_type) {
                     #valid_function
                 }
 
+                #[inline(always)]
                 fn push(&mut self, value: &#column_type, #push_function_params) -> Result<(), Interrupt> {
                     #push_function
                 }
@@ -360,6 +363,7 @@ impl ToTokens for Column {
                     #aggregate_function
                 }
 
+                #[inline(always)]
                 fn finish(&mut self) -> Result<(), Interrupt> {
                     #finish_function
                 }
@@ -573,9 +577,9 @@ impl ToTokens for Process {
             parse_function_return.extend(quote!(#column_name,));
         }
 
-        let signiature = self.signiature();
+        let signature = self.signature();
         inner.extend(quote! {
-            fn process (file: (#input_type)) -> Result<#signiature, (String, usize)> {
+            pub(super) fn process(file: (#input_type)) -> Result<#signature, (String, usize)> {
                 #automata_initialisation
 
                 for i in 0..(file.0.len()) {
@@ -586,8 +590,8 @@ impl ToTokens for Process {
                 #get_returns
 
                 Ok((#return_value))
-            };
-           fn parse(file: &[Vec<&str>]) -> Result<(#parse_return), (String, usize)> {
+            }
+            pub(super) fn parse(file: &[Vec<&str>]) -> Result<(#parse_return), (String, usize)> {
                 #parse_function_declarations
 
                 for (i, line) in file.iter().enumerate() {
@@ -595,11 +599,13 @@ impl ToTokens for Process {
                 }
 
                 Ok((#parse_function_return))
-            };
-            (process, parse)
+            }
         });
 
-        tokens.extend(quote! { { #inner } });
+        tokens.extend(quote! {
+            use super::*;
+            #inner
+        });
     }
 }
 
@@ -636,8 +642,6 @@ impl ToTokens for Program {
         };
 
         inner.extend(quote! {
-            let csv: #main_function_input_type = (#csv);
-
             extern crate alloc;
             use ::core::prelude::rust_2021::*;
             use alloc::{boxed::Box, collections::VecDeque, vec, vec::Vec};
@@ -778,30 +782,31 @@ impl ToTokens for Program {
         });
 
         let mut process_data = vec![];
-        let mut signiature = TokenStream::new();
+        let mut signature = TokenStream::new();
         for (i, process) in self.processes.iter().enumerate() {
-            let name = format!("process_{}", &process.name);
-            let name = Ident::new(&name, Span::mixed_site());
+            let name = Ident::new(&process.name, Span::mixed_site());
+
+            inner.extend(quote!(mod #name { #process }));
 
             if i == 0 {
-                inner.extend(quote! { let (#name, parse_file) = #process; });
-            } else {
-                inner.extend(quote! { let (#name, _) = #process; });
+                inner.extend(quote! {
+                    use #name::parse as parse_file;
+                });
             }
 
             process_data.push((name, process.column_names(), process.ignores()));
 
-            signiature.extend(process.signiature());
-            signiature.extend(quote!(,));
+            signature.extend(process.signature());
+            signature.extend(quote!(,));
         }
-        let signiature = quote!((#signiature));
-        let main_signiature = match self.on_title {
+        let signature = quote!((#signature));
+        let main_signature = match self.on_title {
             #[expect(
                 clippy::redundant_clone,
-                reason = "`signiature` is used when constructing `process`"
+                reason = "`signature` is used when constructing `process`"
             )]
-            OnTitle::Combine | OnTitle::Once => signiature.clone(),
-            OnTitle::Split => quote!(Vec<#signiature>),
+            OnTitle::Combine | OnTitle::Once => signature.clone(),
+            OnTitle::Split => quote!(Vec<#signature>),
         };
         let header = self.processes[0].header(false);
 
@@ -848,7 +853,8 @@ impl ToTokens for Program {
                     returns.extend(quote!(#column_name,));
                 }
             }
-            process_function.extend(quote! { let (#assignment_target) = #process_name(#args)?; });
+            process_function
+                .extend(quote! { let (#assignment_target) = #process_name::process(#args)?; });
 
             args = quote!((#inputs));
 
@@ -953,23 +959,26 @@ impl ToTokens for Program {
                     .collect()
             }
 
-            let process = |file: #process_function_input_type| -> Result<#signiature, (String, usize)> {
+            #[inline(always)]
+            fn process(file: #process_function_input_type) -> Result<#signature, (String, usize)> {
                 #process_function
 
                 Ok((#process_function_return))
-            };
+            }
 
-            let main = |csv: #main_function_input_type| -> Result<#main_signiature, (String, usize)> {
+            #[inline(always)]
+            pub(super) fn main(csv: #main_function_input_type) -> Result<#main_signature, (String, usize)> {
                 #start_of_main
 
                 #main_body
 
                 #main_return
-            };
-
-            main(csv)
+            }
         });
 
-        tokens.extend(quote! { { #inner } });
+        tokens.extend(quote! { {
+            mod __sanitise { #inner }
+            __sanitise::main(#csv)
+        } });
     }
 }

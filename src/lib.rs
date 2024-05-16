@@ -426,7 +426,7 @@ struct Process {
 }
 
 impl Process {
-    fn signiature(&self) -> TokenStream {
+    fn signature(&self) -> TokenStream {
         let mut tokens = TokenStream::new();
         for column in &self.columns {
             if column.ignore {
