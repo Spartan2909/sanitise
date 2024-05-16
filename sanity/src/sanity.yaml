@@ -21,7 +21,7 @@ processes:
         null-surrogates: [-1]
         valid-values: [0, 1]
         output-type: boolean
-        output: "value == 1"
+        output: "boolean(value)"
         on-null: delete
   - name: process
     aggregate-column: time
