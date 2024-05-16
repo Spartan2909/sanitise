@@ -707,7 +707,7 @@ impl ToTokens for Program {
             impl SanitiseConversions for f64 {
                 #[inline(always)]
                 fn to_bool(&self) -> Result<bool, Interrupt> {
-                    Ok(self != &0.0)
+                    Ok(*self != 0.0)
                 }
 
                 #[inline(always)]
@@ -729,7 +729,7 @@ impl ToTokens for Program {
             impl SanitiseConversions for i64 {
                 #[inline(always)]
                 fn to_bool(&self) -> Result<bool, Interrupt> {
-                    Ok(self != &0)
+                    Ok(*self != 0)
                 }
 
                 #[inline(always)]
