@@ -1,6 +1,5 @@
 #![feature(lint_reasons, proc_macro_expand)]
 #![doc = include_str!("../README.md")]
-#![deny(clippy::todo, clippy::unwrap_used)]
 
 mod output;
 use output::parse_output;
@@ -32,7 +31,7 @@ enum ColumnType {
 }
 
 impl ColumnType {
-    fn is_numeric(&self) -> bool {
+    const fn is_numeric(self) -> bool {
         match self {
             ColumnType::Float | ColumnType::Integer => true,
             ColumnType::Bool | ColumnType::String => false,
@@ -40,14 +39,16 @@ impl ColumnType {
     }
 }
 
-impl From<&str> for ColumnType {
-    fn from(value: &str) -> Self {
+impl TryFrom<&str> for ColumnType {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "boolean" => ColumnType::Bool,
-            "float" => ColumnType::Float,
-            "integer" => ColumnType::Integer,
-            "string" => ColumnType::String,
-            _ => panic!("invalid column type {value}"),
+            "boolean" => Ok(ColumnType::Bool),
+            "float" => Ok(ColumnType::Float),
+            "integer" => Ok(ColumnType::Integer),
+            "string" => Ok(ColumnType::String),
+            _ => Err(format!("invalid column type {value}")),
         }
     }
 }
@@ -69,9 +70,11 @@ impl From<Value> for ColumnType {
     }
 }
 
-impl From<String> for ColumnType {
-    fn from(value: String) -> Self {
-        ColumnType::from(value.as_str())
+impl TryFrom<String> for ColumnType {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        ColumnType::try_from(value.as_str())
     }
 }
 
@@ -94,23 +97,27 @@ enum Value {
     String(String),
 }
 
-impl From<&Yaml> for Value {
-    fn from(value: &Yaml) -> Self {
+impl TryFrom<&Yaml> for Value {
+    type Error = String;
+
+    fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
         match value {
-            Yaml::Integer(i) => Value::Integer(*i),
-            Yaml::Real(s) => Value::Real(
-                s.parse()
-                    .unwrap_or_else(|_| panic!("invalid real {:#?}", value)),
-            ),
-            Yaml::String(s) => Value::String(s.to_owned()),
-            _ => panic!("invalid value {:#?}", value),
+            Yaml::Integer(i) => Ok(Value::Integer(*i)),
+            Yaml::Real(s) => s
+                .parse()
+                .map_err(|_| format!("invalid real {value:#?}"))
+                .map(Value::Real),
+            Yaml::String(s) => Ok(Value::String(s.to_owned())),
+            _ => Err(format!("invalid value {value:#?}")),
         }
     }
 }
 
-impl From<Yaml> for Value {
-    fn from(value: Yaml) -> Self {
-        Value::from(&value)
+impl TryFrom<Yaml> for Value {
+    type Error = String;
+
+    fn try_from(value: Yaml) -> Result<Self, Self::Error> {
+        Value::try_from(&value)
     }
 }
 
@@ -149,7 +156,8 @@ fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
                 .unwrap_or_else(|| {
                     panic!("'previous' option for on-{kind} requires key '{kind}-sentinel'")
                 })
-                .into();
+                .try_into()
+                .unwrap();
             OnInvalid::Previous(sentinel)
         }
         "sentinel" => {
@@ -159,7 +167,8 @@ fn get_on_invalid(yaml: &Yaml, hash: &mut Hash, kind: &str) -> OnInvalid {
                 .unwrap_or_else(|| {
                     panic!("'sentinel' option for on-{kind} requires key '{kind}-sentinel'")
                 })
-                .into();
+                .try_into()
+                .unwrap();
             OnInvalid::Sentinel(sentinel)
         }
         _ => panic!("invalid value for on-{kind}: '{on_invalid}'"),
@@ -202,14 +211,14 @@ impl fmt::Display for BinOp {
 }
 
 impl BinOp {
-    fn is_comparison(&self) -> bool {
+    const fn is_comparison(self) -> bool {
         matches!(
             self,
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
         )
     }
 
-    fn is_numeric(&self) -> bool {
+    const fn is_numeric(self) -> bool {
         matches!(
             self,
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
@@ -324,9 +333,9 @@ impl Output {
                 let right_type = right.return_type(var_types)?;
 
                 if left_type != right_type {
-                    Err(format!("cannot compare {left_type} with {right_type}"))?
+                    Err(format!("cannot compare {left_type} with {right_type}"))?;
                 } else if operator.is_numeric() && !left_type.is_numeric() {
-                    Err(format!("cannot use operator '{operator}' on {left_type}"))?
+                    Err(format!("cannot use operator '{operator}' on {left_type}"))?;
                 }
 
                 if operator.is_comparison() {
@@ -336,24 +345,27 @@ impl Output {
                 }
             }
             Output::Function(function) => function.return_type(var_types),
-            Output::Identifier(ident) => var_types
-                .get(ident)
-                .map(|column_type| Ok(*column_type))
-                .unwrap_or(Err(format!("identifier '{ident}' not found"))),
+            Output::Identifier(ident) => var_types.get(ident).map_or_else(
+                || Err(format!("identifier '{ident}' not found")),
+                |column_type| Ok(*column_type),
+            ),
             Output::Literal(value) => Ok(value.into()),
             Output::Unary { operator, right } => match *operator {
                 UnOp::Negate => {
                     let right_type = right.return_type(var_types)?;
-                    if !right_type.is_numeric() {
-                        panic!("cannot use operator '{operator}' on {right_type}");
-                    }
+                    assert!(
+                        right_type.is_numeric(),
+                        "cannot use operator '{operator}' on {right_type}"
+                    );
                     Ok(right_type)
                 }
                 UnOp::Not => {
                     let right_type = right.return_type(var_types)?;
-                    if right_type != ColumnType::Bool {
-                        panic!("cannot use operator '{operator}' on {right_type}");
-                    }
+                    assert_eq!(
+                        right_type,
+                        ColumnType::Bool,
+                        "cannot use operator '{operator}' on {right_type}"
+                    );
                     Ok(ColumnType::Bool)
                 }
             },
@@ -368,13 +380,15 @@ enum Aggregate {
     Last,
 }
 
-impl From<&str> for Aggregate {
-    fn from(value: &str) -> Self {
+impl TryFrom<&str> for Aggregate {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "average" => Aggregate::Average,
-            "first" => Aggregate::First,
-            "last" => Aggregate::Last,
-            _ => panic!("invalid value for 'aggregate': '{value}'"),
+            "average" => Ok(Aggregate::Average),
+            "first" => Ok(Aggregate::First),
+            "last" => Ok(Aggregate::Last),
+            _ => Err(format!("invalid value for 'aggregate': '{value}'")),
         }
     }
 }
@@ -382,7 +396,7 @@ impl From<&str> for Aggregate {
 #[derive(Debug, Clone)]
 struct Column {
     title: String,
-    column_type: ColumnType,
+    input_type: ColumnType,
     output_type: ColumnType,
     null_surrogates: Option<Vec<Value>>,
     valid_values: Option<Vec<Value>>,
@@ -398,7 +412,7 @@ struct Column {
 }
 
 impl Column {
-    fn needs_state(&self) -> bool {
+    const fn needs_state(&self) -> bool {
         matches!(self.on_invalid, OnInvalid::Average(_))
             || matches!(self.on_null, OnInvalid::Average(_))
     }
@@ -437,7 +451,7 @@ impl Process {
     fn column_types(&self) -> Vec<ColumnType> {
         self.columns
             .iter()
-            .map(|column| column.column_type)
+            .map(|column| column.input_type)
             .collect()
     }
 
@@ -469,18 +483,19 @@ enum OnTitle {
     Split,
 }
 
-impl From<Yaml> for OnTitle {
-    fn from(value: Yaml) -> Self {
-        let value = value
-            .into_string()
-            .expect("value of 'on_title' must be a string");
-        let on_title: &str = &value;
+impl TryFrom<Yaml> for OnTitle {
+    type Error = String;
 
-        match on_title {
-            "combine" => OnTitle::Combine,
-            "once" => OnTitle::Once,
-            "split" => OnTitle::Split,
-            _ => panic!("invalid value for title: '{on_title}'"),
+    fn try_from(value: Yaml) -> Result<Self, Self::Error> {
+        let on_title = value
+            .into_string()
+            .ok_or("value of 'on_title' must be a string")?;
+
+        match on_title.as_str() {
+            "combine" => Ok(OnTitle::Combine),
+            "once" => Ok(OnTitle::Once),
+            "split" => Ok(OnTitle::Split),
+            _ => Err(format!("invalid value for title: '{on_title}'")),
         }
     }
 }
@@ -517,19 +532,19 @@ fn parse_column(input: Yaml) -> Column {
         .expect("column type required")
         .into_string()
         .expect("column type must be a string")
-        .into();
+        .try_into()
+        .unwrap();
 
     let ignore = input
         .remove(&Yaml::from_str("ignore"))
-        .map(|yaml| yaml.as_bool().expect("'ignore' must be a Boolean"))
-        .unwrap_or(false);
+        .is_some_and(|yaml| yaml.as_bool().expect("'ignore' must be a Boolean"));
 
     if ignore {
         ensure_empty(&input, "column");
 
         return Column {
             title,
-            column_type,
+            input_type: column_type,
             output_type: column_type,
             null_surrogates: None,
             valid_values: None,
@@ -547,22 +562,20 @@ fn parse_column(input: Yaml) -> Column {
 
     let output_type = input
         .remove(&Yaml::from_str("output-type"))
-        .map(|yaml| {
+        .map_or(column_type, |yaml| {
             yaml.into_string()
                 .expect("column type must be a string")
-                .into()
-        })
-        .unwrap_or(column_type);
+                .try_into()
+                .unwrap()
+        });
 
     let null_surrogates = input.remove(&Yaml::from_str("null-surrogates")).map(|yaml| {
             yaml.into_vec()
                 .expect("'null-surrogate' must be an array")
                 .into_iter()
                 .map(|yaml| {
-                    let value: Value = yaml.into();
-                    if ColumnType::from(&value) != column_type {
-                        panic!("the type of the values in 'null-surrogate' must be the same as 'columm-type'")
-                    }
+                    let value: Value = yaml.try_into().unwrap();
+                    assert_eq!(ColumnType::from(&value), column_type, "the type of the values in 'null-surrogate' must be the same as 'columm-type'");
                     value
                 })
                 .collect()
@@ -573,10 +586,12 @@ fn parse_column(input: Yaml) -> Column {
             .expect("'valid-values' must be an array")
             .into_iter()
             .map(|yaml| {
-                let value: Value = yaml.into();
-                if ColumnType::from(&value) != column_type {
-                    panic!("the type of the values in 'valid-values' must be the same as 'columm-type'")
-                }
+                let value: Value = yaml.try_into().unwrap();
+                assert_eq!(
+                    ColumnType::from(&value),
+                    column_type,
+                    "the type of the values in 'valid-values' must be the same as 'columm-type'"
+                );
                 value
             })
             .collect()
@@ -584,31 +599,38 @@ fn parse_column(input: Yaml) -> Column {
 
     let on_invalid = input
         .remove(&Yaml::from_str("on-invalid"))
-        .map(|yaml| get_on_invalid(&yaml, &mut input, "invalid"))
-        .unwrap_or(OnInvalid::Abort);
+        .map_or(OnInvalid::Abort, |yaml| {
+            get_on_invalid(&yaml, &mut input, "invalid")
+        });
 
     let on_null = input
         .remove(&Yaml::from_str("on-null"))
-        .map(|yaml| get_on_invalid(&yaml, &mut input, "null"))
-        .unwrap_or(OnInvalid::Abort);
+        .map_or(OnInvalid::Abort, |yaml| {
+            get_on_invalid(&yaml, &mut input, "null")
+        });
 
-    if matches!(on_null, OnInvalid::Average(_)) && !matches!(on_invalid, OnInvalid::Average(_)) {
-        panic!("'on-null' can only be 'average' if 'on-invalid' is also 'average'")
-    }
+    assert!(
+        !matches!(on_null, OnInvalid::Average(_)) || matches!(on_invalid, OnInvalid::Average(_)),
+        "'on-null' can only be 'average' if 'on-invalid' is also 'average'"
+    );
 
     let max = input.remove(&Yaml::from_str("max")).map(|yaml| {
-        let value: Value = yaml.into();
-        if ColumnType::from(&value) != column_type {
-            panic!("the type of 'max' must be the same as 'columm-type'")
-        }
+        let value: Value = yaml.try_into().unwrap();
+        assert_eq!(
+            ColumnType::from(&value),
+            column_type,
+            "the type of 'max' must be the same as 'columm-type'"
+        );
         value
     });
 
     let min = input.remove(&Yaml::from_str("min")).map(|yaml| {
-        let value: Value = yaml.into();
-        if ColumnType::from(&value) != column_type {
-            panic!("the type of 'min' must be the same as 'columm-type'")
-        }
+        let value: Value = yaml.try_into().unwrap();
+        assert_eq!(
+            ColumnType::from(&value),
+            column_type,
+            "the type of 'min' must be the same as 'columm-type'"
+        );
         value
     });
 
@@ -617,38 +639,40 @@ fn parse_column(input: Yaml) -> Column {
             .expect("'invalid-values' must be an array")
             .into_iter()
             .map(|yaml| {
-                let value: Value = yaml.into();
-                if ColumnType::from(&value) != column_type {
-                    panic!("the type of the values in 'invalid-values' must be the same as 'columm-type'")
-                }
+                let value: Value = yaml.try_into().unwrap();
+                assert_eq!(
+                    ColumnType::from(&value),
+                    column_type,
+                    "the type of the values in 'invalid-values' must be the same as 'columm-type'"
+                );
                 value
             })
             .collect()
     });
 
-    let output = input
-        .remove(&Yaml::from_str("output"))
-        .map(|yaml| parse_output(yaml.into_string().expect("'output' must be a string")))
-        .unwrap_or(Output::Identifier(Ident::new("value", Span::call_site())));
+    let output = input.remove(&Yaml::from_str("output")).map_or_else(
+        || Output::Identifier(Ident::new("value", Span::call_site())),
+        |yaml| parse_output(&yaml.into_string().expect("'output' must be a string")),
+    );
 
     let aggregate = input
         .remove(&Yaml::from_str("aggregate"))
-        .map(|yaml| {
+        .map_or(Aggregate::First, |yaml| {
             yaml.as_str()
                 .expect("value of 'aggregate' must be a string")
-                .into()
-        })
-        .unwrap_or(Aggregate::First);
-
-    if aggregate == Aggregate::Average && !output_type.is_numeric() {
-        panic!("'{output_type}' cannot be averaged");
-    }
+                .try_into()
+                .unwrap()
+        });
+    assert!(
+        aggregate != Aggregate::Average || output_type.is_numeric(),
+        "'{output_type}' cannot be averaged"
+    );
 
     ensure_empty(&input, "column");
 
     Column {
         title,
-        column_type,
+        input_type: column_type,
         output_type,
         null_surrogates,
         valid_values,
@@ -713,9 +737,10 @@ fn parse_process(input: Yaml) -> Process {
     }
 
     if let Some(aggregate) = &process.aggregate_column {
-        if !names.contains(aggregate) {
-            panic!("aggregate value '{aggregate}' is not a column");
-        }
+        assert!(
+            names.contains(aggregate),
+            "aggregate value '{aggregate}' is not a column"
+        );
     }
 
     let mut var_types: HashMap<Ident, ColumnType> = process
@@ -724,7 +749,7 @@ fn parse_process(input: Yaml) -> Process {
         .map(|column| {
             (
                 Ident::new(
-                    &format!("value_{}", column.title.to_owned()),
+                    &format!("value_{}", column.title.clone()),
                     Span::call_site(),
                 ),
                 column.output_type,
@@ -734,7 +759,7 @@ fn parse_process(input: Yaml) -> Process {
     let value_ident = Ident::new("value", Span::call_site());
 
     for column in &process.columns {
-        var_types.insert(value_ident.clone(), column.column_type);
+        var_types.insert(value_ident.clone(), column.input_type);
         let return_type = match column.output.return_type(&var_types) {
             Ok(return_type) => return_type,
             Err(message) => panic!(
@@ -742,12 +767,11 @@ fn parse_process(input: Yaml) -> Process {
                 process.name, column.title, message
             ),
         };
-        if return_type != column.output_type {
-            panic!(
-                "process '{}', column '{}': expected {}, found {}",
-                process.name, column.title, column.output_type, return_type
-            );
-        }
+        assert_eq!(
+            return_type, column.output_type,
+            "process '{}', column '{}': expected {}, found {return_type}",
+            process.name, column.title, column.output_type
+        );
         var_types.remove(&value_ident);
     }
 
@@ -768,8 +792,7 @@ fn parse_program(input: Yaml, csv: Expr, string_input: bool) -> Program {
 
     let on_title = program
         .remove(&Yaml::from_str("on-title"))
-        .map(|yaml| yaml.into())
-        .unwrap_or(OnTitle::Once);
+        .map_or(OnTitle::Once, |yaml| yaml.try_into().unwrap());
 
     ensure_empty(&program, "program");
 
@@ -795,17 +818,25 @@ impl Parse for MacroInput {
         let tokens = tokens.expand_expr().unwrap_or_else(|err| panic!("{err}"));
         let config = parse(tokens)?;
 
-        let _comma = input.parse()?;
-        let csv = input.parse()?;
-        let _final_comma = input.parse()?;
-
         Ok(MacroInput {
             config,
-            _comma,
-            csv,
-            _final_comma,
+            _comma: input.parse()?,
+            csv: input.parse()?,
+            _final_comma: input.parse()?,
         })
     }
+}
+
+fn sanitise_main(input: proc_macro::TokenStream, string_input: bool) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as MacroInput);
+    let source = input.config.value();
+    let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
+        .pop_front()
+        .expect("expect at least one document");
+
+    let program = parse_program(yaml, input.csv, string_input);
+
+    program.to_token_stream().into()
 }
 
 /// Cleans up and validates data.
@@ -852,15 +883,7 @@ impl Parse for MacroInput {
 /// ```
 #[proc_macro]
 pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as MacroInput);
-    let source = input.config.value();
-    let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
-        .pop_front()
-        .expect("expect at least one document");
-
-    let program = parse_program(yaml, input.csv, false);
-
-    program.to_token_stream().into()
+    sanitise_main(input, false)
 }
 
 /// Cleans up and validates data from a string.
@@ -903,13 +926,5 @@ pub fn sanitise(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// ```
 #[proc_macro]
 pub fn sanitise_string(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as MacroInput);
-    let source = input.config.value();
-    let yaml = VecDeque::from(YamlLoader::load_from_str(&source).expect("failed to parse yaml"))
-        .pop_front()
-        .expect("expect at least one document");
-
-    let program = parse_program(yaml, input.csv, true);
-
-    program.to_token_stream().into()
+    sanitise_main(input, true)
 }

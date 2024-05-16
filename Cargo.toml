@@ -4,7 +4,6 @@ version.workspace = true
 edition = "2021"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
-authors.workspace = true
 description = "Headache-free data clean-up"
 repository = "https://github.com/Spartan2909/sanitise"
 documentation = "https://docs.rs/sanitise"
@@ -23,13 +22,33 @@ yaml-rust = "0.4"
 [features]
 benchmark = []
 
+[lints]
+workspace = true
+
 [workspace]
 members = ["sanity", "strings-test"]
 package.version = "0.4.0"
-package.authors = ["<robson.caleb.299@gmailcom> Caleb Robson"]
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "forbid"
+
+[workspace.lints.clippy]
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+missing_panics_doc = "allow"
+multiple_unsafe_ops_per_block = "deny"
+option_if_let_else = "allow"
+redundant_pub_crate = "allow"
+todo = "warn"
+undocumented_unsafe_blocks = "deny"
+use_self = "allow"
+#unwrap_used = "warn"
 
 [profile.release]
 opt-level = 3
 lto = true
-incremental = true
-codegen-units = 16
+codegen-units = 1

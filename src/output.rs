@@ -108,7 +108,10 @@ fn function(input: ParseStream) -> Result<Output> {
     } else if input.peek(kw::concat) {
         input.parse::<kw::concat>()?;
         let (arg1, arg2) = args(input)?;
-        Ok(Output::Function(Function::Concat(Box::new(arg1), Box::new(arg2))))
+        Ok(Output::Function(Function::Concat(
+            Box::new(arg1),
+            Box::new(arg2),
+        )))
     } else if input.peek(kw::floor) {
         input.parse::<kw::floor>()?;
         Ok(Output::Function(Function::Floor(Box::new(arg(input)?))))
@@ -198,8 +201,8 @@ impl Parse for Output {
     }
 }
 
-pub(crate) fn parse_output(input: String) -> Output {
-    let tokens = match TokenStream::from_str(&input) {
+pub(crate) fn parse_output(input: &str) -> Output {
+    let tokens = match TokenStream::from_str(input) {
         Ok(stream) => stream,
         Err(e) => panic!("{e}"),
     };

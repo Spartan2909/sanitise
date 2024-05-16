@@ -117,7 +117,7 @@ impl ToTokens for Column {
         let name = Ident::new(&title, Span::call_site());
         let state_name = Ident::new(&(title + "_State"), Span::call_site());
 
-        let column_type = self.column_type;
+        let column_type = self.input_type;
 
         let output_type = self.output_type;
 
@@ -201,7 +201,7 @@ impl ToTokens for Column {
                 if value > &#max {
                     return self.invalid(value);
                 }
-            })
+            });
         }
 
         if let Some(min) = &self.min {
@@ -544,7 +544,7 @@ impl ToTokens for Process {
         let mut input_type = TokenStream::new();
         let mut parse_return = TokenStream::new();
         for column in &self.columns {
-            let column_type = column.column_type;
+            let column_type = column.input_type;
             input_type.extend(quote!(&[Option<#column_type>],));
             parse_return.extend(quote!(Vec<Option<#column_type>>,));
         }
