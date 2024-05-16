@@ -16,14 +16,6 @@ struct Args {
     output_file_name: String,
 }
 
-fn extend_buf(buf: &mut String, string: &str) {
-    if buf.len() + string.len() > buf.capacity() {
-        buf.reserve(1024);
-    }
-
-    buf.push_str(string);
-}
-
 fn main() -> ExitCode {
     println!("Starting...");
     #[cfg(feature = "minimal_benchmark")]
@@ -77,18 +69,18 @@ fn main() -> ExitCode {
         let file_name_processed = file_name_base + "_processed.csv";
 
         // Sizes chosen to avoid reallocation
-        let mut buf_raw = String::with_capacity(time_millis.len() * 18);
-        let mut buf_processed = String::with_capacity(time_millis.len() * 7);
+        let mut buf_raw = String::with_capacity(time_millis.len() * 20);
+        let mut buf_processed = String::with_capacity(time_millis.len() * 10);
 
-        extend_buf(&mut buf_raw, "time,pulse,movement\n");
-        extend_buf(&mut buf_processed, "time,pulse\n");
+        buf_raw.push_str("time,pulse,movement\n");
+        buf_processed.push_str("time,pulse\n");
 
         for ((time_millis, pulse), movement) in zip(zip(time_millis, pulse_raw), movement) {
-            extend_buf(&mut buf_raw, &format!("{time_millis},{pulse},{movement}\n"));
+            buf_raw.push_str(&format!("{time_millis},{pulse},{movement}\n"));
         }
 
         for (time_mins, pulse) in zip(time_mins, pulse_average) {
-            extend_buf(&mut buf_processed, &format!("{time_mins},{pulse}\n"));
+            buf_processed.push_str(&format!("{time_mins},{pulse}\n"));
         }
 
         #[cfg(feature = "benchmark")]

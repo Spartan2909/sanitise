@@ -675,10 +675,12 @@ impl ToTokens for Program {
             }
 
             impl SanitiseConversions for bool {
+                #[inline(always)]
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(*self)
                 }
 
+                #[inline(always)]
                 fn to_float(&self) -> Result<f64, Interrupt> {
                     if *self {
                         Ok(1.0)
@@ -687,6 +689,7 @@ impl ToTokens for Program {
                     }
                 }
 
+                #[inline(always)]
                 fn to_int(&self) -> Result<i64, Interrupt> {
                     if *self {
                         Ok(1)
@@ -695,48 +698,58 @@ impl ToTokens for Program {
                     }
                 }
 
+                #[inline(always)]
                 fn to_string(&self) -> Result<String, Interrupt> {
                     Ok(ToString::to_string(self))
                 }
             }
 
             impl SanitiseConversions for f64 {
+                #[inline(always)]
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(self != &0.0)
                 }
 
+                #[inline(always)]
                 fn to_float(&self) -> Result<f64, Interrupt> {
                     Ok(*self)
                 }
 
+                #[inline(always)]
                 fn to_int(&self) -> Result<i64, Interrupt> {
                     Ok(*self as i64)
                 }
 
+                #[inline(always)]
                 fn to_string(&self) -> Result<String, Interrupt> {
                     Ok(ToString::to_string(self))
                 }
             }
 
             impl SanitiseConversions for i64 {
+                #[inline(always)]
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(self != &0)
                 }
 
+                #[inline(always)]
                 fn to_float(&self) -> Result<f64, Interrupt> {
                     Ok(*self as f64)
                 }
 
+                #[inline(always)]
                 fn to_int(&self) -> Result<i64, Interrupt> {
                     Ok(*self)
                 }
 
+                #[inline(always)]
                 fn to_string(&self) -> Result<String, Interrupt> {
                     Ok(ToString::to_string(self))
                 }
             }
 
             impl SanitiseConversions for String {
+                #[inline(always)]
                 fn to_bool(&self) -> Result<bool, Interrupt> {
                     Ok(!self.is_empty())
                 }
@@ -759,25 +772,33 @@ impl ToTokens for Program {
                     }
                 }
 
+                #[inline(always)]
                 fn to_string(&self) -> Result<String, Interrupt> {
                     Ok(self.to_owned())
                 }
             }
 
+            #[inline(always)]
             fn sanitise_ceiling(value: &f64) -> f64 {
                 (*value).ceil()
             }
 
+            #[inline(always)]
             fn sanitise_floor(value: &f64) -> f64 {
                 (*value).floor()
             }
 
+            #[inline(always)]
             fn sanitise_round(value: &f64) -> f64 {
                 (*value).round()
             }
 
+            #[inline(always)]
             fn sanitise_concat(value1: &str, value2: &str) -> String {
-                value1.to_owned() + value2
+                let mut output = String::with_capacity(value1.len() + value2.len());
+                output.push_str(value1);
+                output.push_str(value2);
+                output
             }
         });
 
@@ -940,10 +961,8 @@ impl ToTokens for Program {
                             .unwrap_or(s)
                     })
                     .collect();
-                if let Some(line) = lines.last() {
-                    if line.is_empty() {
-                        lines.pop();
-                    }
+                if lines.last().is_some_and(|line| line.is_empty()) {
+                    lines.pop();
                 }
 
                 lines
