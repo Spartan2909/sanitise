@@ -609,6 +609,169 @@ impl ToTokens for Process {
     }
 }
 
+fn runtime() -> TokenStream {
+    quote! {
+        extern crate alloc;
+        use ::core::prelude::rust_2021::*;
+        use alloc::{boxed::Box, collections::VecDeque, vec, vec::Vec};
+
+        enum Interrupt {
+            Delete,
+            Error(String),
+        }
+
+        impl Interrupt {
+            fn extract_error(self) -> String {
+                if let Interrupt::Error(message) = self {
+                    message
+                } else {
+                    panic!("attempted to extract error from 'Delete'")
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, PartialEq)]
+        enum Action {
+            AppendValid,
+            IncrementInvalid,
+        }
+
+        trait SanitiseConversions {
+            fn to_bool(&self) -> Result<bool, Interrupt>;
+            fn to_float(&self) -> Result<f64, Interrupt>;
+            fn to_int(&self) -> Result<i64, Interrupt>;
+            fn to_string(&self) -> Result<String, Interrupt>;
+        }
+
+        impl SanitiseConversions for bool {
+            #[inline(always)]
+            fn to_bool(&self) -> Result<bool, Interrupt> {
+                Ok(*self)
+            }
+
+            #[inline(always)]
+            fn to_float(&self) -> Result<f64, Interrupt> {
+                if *self {
+                    Ok(1.0)
+                } else {
+                    Ok(0.0)
+                }
+            }
+
+            #[inline(always)]
+            fn to_int(&self) -> Result<i64, Interrupt> {
+                if *self {
+                    Ok(1)
+                } else {
+                    Ok(0)
+                }
+            }
+
+            #[inline(always)]
+            fn to_string(&self) -> Result<String, Interrupt> {
+                Ok(ToString::to_string(self))
+            }
+        }
+
+        impl SanitiseConversions for f64 {
+            #[inline(always)]
+            fn to_bool(&self) -> Result<bool, Interrupt> {
+                Ok(*self != 0.0)
+            }
+
+            #[inline(always)]
+            fn to_float(&self) -> Result<f64, Interrupt> {
+                Ok(*self)
+            }
+
+            #[inline(always)]
+            fn to_int(&self) -> Result<i64, Interrupt> {
+                Ok(*self as i64)
+            }
+
+            #[inline(always)]
+            fn to_string(&self) -> Result<String, Interrupt> {
+                Ok(ToString::to_string(self))
+            }
+        }
+
+        impl SanitiseConversions for i64 {
+            #[inline(always)]
+            fn to_bool(&self) -> Result<bool, Interrupt> {
+                Ok(*self != 0)
+            }
+
+            #[inline(always)]
+            fn to_float(&self) -> Result<f64, Interrupt> {
+                Ok(*self as f64)
+            }
+
+            #[inline(always)]
+            fn to_int(&self) -> Result<i64, Interrupt> {
+                Ok(*self)
+            }
+
+            #[inline(always)]
+            fn to_string(&self) -> Result<String, Interrupt> {
+                Ok(ToString::to_string(self))
+            }
+        }
+
+        impl SanitiseConversions for String {
+            #[inline(always)]
+            fn to_bool(&self) -> Result<bool, Interrupt> {
+                Ok(!self.is_empty())
+            }
+
+            fn to_float(&self) -> Result<f64, Interrupt> {
+                if let Ok(n) = self.parse() {
+                    Ok(n)
+                } else {
+                    let message = format!("invalid base for float: '{self}'");
+                    Err(Interrupt::Error(message))
+                }
+            }
+
+            fn to_int(&self) -> Result<i64, Interrupt> {
+                if let Ok(n) = self.parse() {
+                    Ok(n)
+                } else {
+                    let message = format!("invalid base for int: '{self}'");
+                    Err(Interrupt::Error(message))
+                }
+            }
+
+            #[inline(always)]
+            fn to_string(&self) -> Result<String, Interrupt> {
+                Ok(self.to_owned())
+            }
+        }
+
+        #[inline(always)]
+        fn sanitise_ceiling(value: &f64) -> f64 {
+            (*value).ceil()
+        }
+
+        #[inline(always)]
+        fn sanitise_floor(value: &f64) -> f64 {
+            (*value).floor()
+        }
+
+        #[inline(always)]
+        fn sanitise_round(value: &f64) -> f64 {
+            (*value).round()
+        }
+
+        #[inline(always)]
+        fn sanitise_concat(value1: &str, value2: &str) -> String {
+            let mut output = String::with_capacity(value1.len() + value2.len());
+            output.push_str(value1);
+            output.push_str(value2);
+            output
+        }
+    }
+}
+
 impl ToTokens for Program {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let csv = &self.csv;
@@ -641,166 +804,7 @@ impl ToTokens for Program {
             process_function_input_type.clone()
         };
 
-        inner.extend(quote! {
-            extern crate alloc;
-            use ::core::prelude::rust_2021::*;
-            use alloc::{boxed::Box, collections::VecDeque, vec, vec::Vec};
-
-            enum Interrupt {
-                Delete,
-                Error(String),
-            }
-
-            impl Interrupt {
-                fn extract_error(self) -> String {
-                    if let Interrupt::Error(message) = self {
-                        message
-                    } else {
-                        panic!("attempted to extract error from 'Delete'")
-                    }
-                }
-            }
-
-            #[derive(Clone, Copy, PartialEq)]
-            enum Action {
-                AppendValid,
-                IncrementInvalid,
-            }
-
-            trait SanitiseConversions {
-                fn to_bool(&self) -> Result<bool, Interrupt>;
-                fn to_float(&self) -> Result<f64, Interrupt>;
-                fn to_int(&self) -> Result<i64, Interrupt>;
-                fn to_string(&self) -> Result<String, Interrupt>;
-            }
-
-            impl SanitiseConversions for bool {
-                #[inline(always)]
-                fn to_bool(&self) -> Result<bool, Interrupt> {
-                    Ok(*self)
-                }
-
-                #[inline(always)]
-                fn to_float(&self) -> Result<f64, Interrupt> {
-                    if *self {
-                        Ok(1.0)
-                    } else {
-                        Ok(0.0)
-                    }
-                }
-
-                #[inline(always)]
-                fn to_int(&self) -> Result<i64, Interrupt> {
-                    if *self {
-                        Ok(1)
-                    } else {
-                        Ok(0)
-                    }
-                }
-
-                #[inline(always)]
-                fn to_string(&self) -> Result<String, Interrupt> {
-                    Ok(ToString::to_string(self))
-                }
-            }
-
-            impl SanitiseConversions for f64 {
-                #[inline(always)]
-                fn to_bool(&self) -> Result<bool, Interrupt> {
-                    Ok(*self != 0.0)
-                }
-
-                #[inline(always)]
-                fn to_float(&self) -> Result<f64, Interrupt> {
-                    Ok(*self)
-                }
-
-                #[inline(always)]
-                fn to_int(&self) -> Result<i64, Interrupt> {
-                    Ok(*self as i64)
-                }
-
-                #[inline(always)]
-                fn to_string(&self) -> Result<String, Interrupt> {
-                    Ok(ToString::to_string(self))
-                }
-            }
-
-            impl SanitiseConversions for i64 {
-                #[inline(always)]
-                fn to_bool(&self) -> Result<bool, Interrupt> {
-                    Ok(*self != 0)
-                }
-
-                #[inline(always)]
-                fn to_float(&self) -> Result<f64, Interrupt> {
-                    Ok(*self as f64)
-                }
-
-                #[inline(always)]
-                fn to_int(&self) -> Result<i64, Interrupt> {
-                    Ok(*self)
-                }
-
-                #[inline(always)]
-                fn to_string(&self) -> Result<String, Interrupt> {
-                    Ok(ToString::to_string(self))
-                }
-            }
-
-            impl SanitiseConversions for String {
-                #[inline(always)]
-                fn to_bool(&self) -> Result<bool, Interrupt> {
-                    Ok(!self.is_empty())
-                }
-
-                fn to_float(&self) -> Result<f64, Interrupt> {
-                    if let Ok(n) = self.parse() {
-                        Ok(n)
-                    } else {
-                        let message = format!("invalid base for float: '{self}'");
-                        Err(Interrupt::Error(message))
-                    }
-                }
-
-                fn to_int(&self) -> Result<i64, Interrupt> {
-                    if let Ok(n) = self.parse() {
-                        Ok(n)
-                    } else {
-                        let message = format!("invalid base for int: '{self}'");
-                        Err(Interrupt::Error(message))
-                    }
-                }
-
-                #[inline(always)]
-                fn to_string(&self) -> Result<String, Interrupt> {
-                    Ok(self.to_owned())
-                }
-            }
-
-            #[inline(always)]
-            fn sanitise_ceiling(value: &f64) -> f64 {
-                (*value).ceil()
-            }
-
-            #[inline(always)]
-            fn sanitise_floor(value: &f64) -> f64 {
-                (*value).floor()
-            }
-
-            #[inline(always)]
-            fn sanitise_round(value: &f64) -> f64 {
-                (*value).round()
-            }
-
-            #[inline(always)]
-            fn sanitise_concat(value1: &str, value2: &str) -> String {
-                let mut output = String::with_capacity(value1.len() + value2.len());
-                output.push_str(value1);
-                output.push_str(value2);
-                output
-            }
-        });
+        inner.extend(runtime());
 
         let mut process_data = vec![];
         let mut signature = TokenStream::new();
