@@ -4,12 +4,12 @@ use crate::{
 };
 
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::Index;
 
 struct ValueList<'a>(&'a Vec<Value>);
 
-impl<'a> ToTokens for ValueList<'a> {
+impl ToTokens for ValueList<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let mut inner = TokenStream::new();
         for value in self.0 {
@@ -625,7 +625,7 @@ fn runtime() -> TokenStream {
                 if let Interrupt::Error(message) = self {
                     message
                 } else {
-                    panic!("attempted to extract error from 'Delete'")
+                    ::core::panic::panic!("attempted to extract error from 'Delete'")
                 }
             }
         }
@@ -826,10 +826,6 @@ impl ToTokens for Program {
         }
         let signature = quote!((#signature));
         let main_signature = match self.on_title {
-            #[expect(
-                clippy::redundant_clone,
-                reason = "`signature` is used when constructing `process`"
-            )]
             OnTitle::Combine | OnTitle::Once => signature.clone(),
             OnTitle::Split => quote!(Vec<#signature>),
         };

@@ -1,4 +1,4 @@
-#![feature(lint_reasons, proc_macro_expand)]
+#![feature(proc_macro_expand)]
 #![doc = include_str!("../README.md")]
 
 mod output;
@@ -14,13 +14,13 @@ use std::{
 extern crate proc_macro;
 
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::{
-    parse,
+    Expr, LitStr, Token, parse,
     parse::{Parse, ParseStream},
-    parse_macro_input, Expr, LitStr, Token,
+    parse_macro_input,
 };
-use yaml_rust::{yaml::Hash, Yaml, YamlLoader};
+use yaml_rust::{Yaml, YamlLoader, yaml::Hash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ColumnType {
